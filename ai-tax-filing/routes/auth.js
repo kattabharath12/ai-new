@@ -1,7 +1,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
-const { User } = require('../database/index'); // Fixed import path
+const User = require('../models/User'); // Import from models directory
 const auth = require('../middleware/auth');
 
 const router = express.Router();
