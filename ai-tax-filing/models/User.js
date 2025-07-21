@@ -1,7 +1,7 @@
 const { DataTypes, Sequelize } = require('sequelize');
 const bcrypt = require('bcryptjs');
 
-// Create sequelize instance using DATABASE_URL from Railway
+// Use Railway's DATABASE_URL
 const sequelize = new Sequelize(process.env.DATABASE_URL, {
   dialect: 'postgres',
   dialectOptions: {
@@ -10,7 +10,7 @@ const sequelize = new Sequelize(process.env.DATABASE_URL, {
       rejectUnauthorized: false
     }
   },
-  logging: console.log
+  logging: false
 });
 
 const User = sequelize.define('User', {
@@ -75,35 +75,8 @@ const User = sequelize.define('User', {
   }
 });
 
-// Add instance method for password comparison
 User.prototype.comparePassword = async function(password) {
   return await bcrypt.compare(password, this.password);
 };
 
-// Initialize database connection and sync
-async function initializeDatabase() {
-  try {
-    console.log('🔄 Connecting to PostgreSQL...');
-    await sequelize.authenticate();
-    console.log('✅ PostgreSQL connected successfully');
-    
-    console.log('🔄 Creating database tables...');
-    await sequelize.sync({ 
-      force: false,
-      alter: true,
-      logging: console.log 
-    });
-    console.log('✅ Database sync completed');
-    
-  } catch (error) {
-    console.error('❌ Database initialization failed:', error);
-    throw error;
-  }
-}
-
-// Export the User model and helper functions
-module.exports = {
-  User,
-  sequelize,
-  initializeDatabase
-};
+module.exports = User;
