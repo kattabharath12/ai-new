@@ -1,4 +1,4 @@
-// Global variables
+// script.js - Fixed Navigation Version
 let authToken = localStorage.getItem('authToken');
 let currentStep = 1;
 let stripe;
@@ -7,54 +7,102 @@ let currentUser = null;
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialize Stripe - REPLACE WITH YOUR ACTUAL PUBLISHABLE KEY
-    stripe = Stripe('pk_test_your_actual_stripe_publishable_key_here');
+    console.log('🚀 Initializing AI Tax Filing App...');
     
+    // Initialize Stripe - REPLACE WITH YOUR ACTUAL KEY
+    try {
+        stripe = Stripe('pk_test_your_actual_stripe_publishable_key_here');
+        console.log('✅ Stripe initialized');
+    } catch (error) {
+        console.error('❌ Stripe initialization failed:', error);
+    }
+    
+    // Check authentication and show appropriate section
     if (authToken) {
+        console.log('👤 User authenticated, loading dashboard...');
         showDashboard();
         loadUserData();
     } else {
+        console.log('🔐 No authentication, showing login...');
         showAuth();
     }
 
+    // Initialize all event listeners
     initializeEventListeners();
     
-    // Add W-9 fields to the tax info form after DOM loads
+    // Add W-9 fields after DOM loads
     setTimeout(() => {
         if (document.getElementById('taxInfoForm')) {
             addW9Fields();
+            console.log('📝 W-9 fields added');
         }
     }, 100);
+    
+    console.log('✅ App initialization complete');
 });
 
-// Event Listeners
+// Event Listeners Setup
 function initializeEventListeners() {
-    // Auth forms
-    document.getElementById('loginFormElement').addEventListener('submit', handleLogin);
-    document.getElementById('signupFormElement').addEventListener('submit', handleSignup);
-    document.getElementById('showSignup').addEventListener('click', () => toggleAuthForms('signup'));
-    document.getElementById('showLogin').addEventListener('click', () => toggleAuthForms('login'));
-    document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+    console.log('🎧 Setting up event listeners...');
+    
+    try {
+        // Auth forms
+        document.getElementById('loginFormElement')?.addEventListener('submit', handleLogin);
+        document.getElementById('signupFormElement')?.addEventListener('submit', handleSignup);
+        document.getElementById('showSignup')?.addEventListener('click', () => toggleAuthForms('signup'));
+        document.getElementById('showLogin')?.addEventListener('click', () => toggleAuthForms('login'));
+        document.getElementById('logoutBtn')?.addEventListener('click', handleLogout);
 
-    // W-9 Tax info form (Step 1) - Updated for W-9
-    document.getElementById('taxInfoForm').addEventListener('submit', handleW9Submit);
-    document.getElementById('addDependent').addEventListener('click', addDependentFields);
+        // W-9 Tax info form (Step 1)
+        document.getElementById('taxInfoForm')?.addEventListener('submit', handleW9Submit);
+        document.getElementById('addDependent')?.addEventListener('click', addDependentFields);
 
-    // File upload (Step 2)
-    document.getElementById('uploadArea').addEventListener('click', () => document.getElementById('w2Upload').click());
-    document.getElementById('w2Upload').addEventListener('change', handleFileUpload);
-    document.getElementById('continueToReview').addEventListener('click', generateForm1040); // Fixed: was generateForm1098
+        // File upload (Step 2)
+        document.getElementById('uploadArea')?.addEventListener('click', () => {
+            document.getElementById('w2Upload')?.click();
+        });
+        document.getElementById('w2Upload')?.addEventListener('change', handleFileUpload);
+        document.getElementById('continueToReview')?.addEventListener('click', generateForm1040);
 
-    // Review and payment (Steps 3-4)
-    document.getElementById('editForm').addEventListener('click', enableFormEditing);
-    document.getElementById('proceedToPayment').addEventListener('click', () => showStep(4));
-    document.getElementById('submitPayment').addEventListener('click', handlePayment);
-    document.getElementById('finalSubmit').addEventListener('click', handleFinalSubmission);
+        // Review and payment (Steps 3-4)
+        document.getElementById('editForm')?.addEventListener('click', enableFormEditing);
+        document.getElementById('proceedToPayment')?.addEventListener('click', () => {
+            console.log('👆 Proceed to payment clicked');
+            showStep(4);
+        });
+        document.getElementById('submitPayment')?.addEventListener('click', handlePayment);
+        document.getElementById('finalSubmit')?.addEventListener('click', handleFinalSubmission);
+        
+        // Add navigation buttons if they exist
+        const nextButtons = document.querySelectorAll('[data-next-step]');
+        const prevButtons = document.querySelectorAll('[data-prev-step]');
+        
+        nextButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const nextStep = parseInt(e.target.getAttribute('data-next-step'));
+                console.log('➡️ Next button clicked, going to step:', nextStep);
+                showStep(nextStep);
+            });
+        });
+        
+        prevButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const prevStep = parseInt(e.target.getAttribute('data-prev-step'));
+                console.log('⬅️ Previous button clicked, going to step:', prevStep);
+                showStep(prevStep);
+            });
+        });
+
+        console.log('✅ Event listeners set up successfully');
+    } catch (error) {
+        console.error('❌ Error setting up event listeners:', error);
+    }
 }
 
 // Authentication Functions
 async function handleLogin(e) {
     e.preventDefault();
+    console.log('🔐 Login attempt...');
     showLoading(true);
 
     const email = document.getElementById('loginEmail').value;
@@ -73,12 +121,15 @@ async function handleLogin(e) {
             authToken = data.token;
             currentUser = data.user;
             localStorage.setItem('authToken', authToken);
+            console.log('✅ Login successful');
             showDashboard();
             loadUserData();
         } else {
+            console.error('❌ Login failed:', data.message);
             showAlert(data.message || 'Login failed', 'error');
         }
     } catch (error) {
+        console.error('❌ Login error:', error);
         showAlert('Login failed. Please try again.', 'error');
     } finally {
         showLoading(false);
@@ -87,6 +138,7 @@ async function handleLogin(e) {
 
 async function handleSignup(e) {
     e.preventDefault();
+    console.log('📝 Signup attempt...');
     showLoading(true);
 
     const userData = {
@@ -110,12 +162,15 @@ async function handleSignup(e) {
             authToken = data.token;
             currentUser = data.user;
             localStorage.setItem('authToken', authToken);
+            console.log('✅ Signup successful');
             showDashboard();
             showAlert('Account created successfully!', 'success');
         } else {
+            console.error('❌ Signup failed:', data.message);
             showAlert(data.message || 'Signup failed', 'error');
         }
     } catch (error) {
+        console.error('❌ Signup error:', error);
         showAlert('Signup failed. Please try again.', 'error');
     } finally {
         showLoading(false);
@@ -123,33 +178,42 @@ async function handleSignup(e) {
 }
 
 function handleLogout() {
+    console.log('👋 Logging out...');
     authToken = null;
     currentUser = null;
     localStorage.removeItem('authToken');
+    currentStep = 1;
     showAuth();
     showAlert('Logged out successfully', 'success');
 }
 
-// UI Functions
+// UI Navigation Functions
 function showAuth() {
-    document.getElementById('authSection').classList.remove('hidden');
-    document.getElementById('dashboardSection').classList.add('hidden');
-    document.getElementById('userEmail').classList.add('hidden');
-    document.getElementById('logoutBtn').classList.add('hidden');
+    console.log('🔐 Showing auth section');
+    document.getElementById('authSection')?.classList.remove('hidden');
+    document.getElementById('dashboardSection')?.classList.add('hidden');
+    document.getElementById('userEmail')?.classList.add('hidden');
+    document.getElementById('logoutBtn')?.classList.add('hidden');
 }
 
 function showDashboard() {
-    document.getElementById('authSection').classList.add('hidden');
-    document.getElementById('dashboardSection').classList.remove('hidden');
-    document.getElementById('userEmail').classList.remove('hidden');
-    document.getElementById('logoutBtn').classList.remove('hidden');
+    console.log('📊 Showing dashboard');
+    document.getElementById('authSection')?.classList.add('hidden');
+    document.getElementById('dashboardSection')?.classList.remove('hidden');
+    document.getElementById('userEmail')?.classList.remove('hidden');
+    document.getElementById('logoutBtn')?.classList.remove('hidden');
     
     if (currentUser) {
-        document.getElementById('userEmail').textContent = currentUser.email;
+        const userEmailEl = document.getElementById('userEmail');
+        if (userEmailEl) {
+            userEmailEl.textContent = currentUser.email;
+        }
     }
     
-    // Update step labels to reflect correct form names
     updateStepLabels();
+    
+    // Show the current step
+    showStep(currentStep);
 }
 
 function updateStepLabels() {
@@ -166,21 +230,38 @@ function updateStepLabels() {
 }
 
 function toggleAuthForms(form) {
+    console.log('🔄 Toggling auth form to:', form);
     if (form === 'signup') {
-        document.getElementById('loginForm').classList.add('hidden');
-        document.getElementById('signupForm').classList.remove('hidden');
+        document.getElementById('loginForm')?.classList.add('hidden');
+        document.getElementById('signupForm')?.classList.remove('hidden');
     } else {
-        document.getElementById('signupForm').classList.add('hidden');
-        document.getElementById('loginForm').classList.remove('hidden');
+        document.getElementById('signupForm')?.classList.add('hidden');
+        document.getElementById('loginForm')?.classList.remove('hidden');
     }
 }
 
+// MAIN NAVIGATION FUNCTION - This is crucial!
 function showStep(step) {
-    // Hide all steps
-    document.querySelectorAll('[id$="Step"]').forEach(el => el.classList.add('hidden'));
+    console.log(`📍 Navigating to step ${step} (current: ${currentStep})`);
     
-    // Show current step
-    const stepElements = {
+    // Validate step number
+    if (step < 1 || step > 5) {
+        console.error('❌ Invalid step number:', step);
+        return;
+    }
+    
+    // Hide all step sections first
+    const stepElements = ['taxInfoStep', 'uploadStep', 'reviewStep', 'paymentStep', 'submissionStep'];
+    
+    stepElements.forEach(elementId => {
+        const element = document.getElementById(elementId);
+        if (element) {
+            element.classList.add('hidden');
+        }
+    });
+    
+    // Show the target step
+    const targetSteps = {
         1: 'taxInfoStep',
         2: 'uploadStep',
         3: 'reviewStep',
@@ -188,40 +269,106 @@ function showStep(step) {
         5: 'submissionStep'
     };
     
-    document.getElementById(stepElements[step]).classList.remove('hidden');
+    const targetElement = document.getElementById(targetSteps[step]);
+    if (targetElement) {
+        targetElement.classList.remove('hidden');
+        console.log(`✅ Step ${step} (${targetSteps[step]}) is now visible`);
+    } else {
+        console.error(`❌ Step element not found: ${targetSteps[step]}`);
+    }
     
     // Update step indicators
     for (let i = 1; i <= 5; i++) {
         const stepEl = document.getElementById(`step${i}`);
-        stepEl.className = `w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-            i < step ? 'step-completed' : 
-            i === step ? 'step-active' : 'step-inactive'
-        }`;
+        if (stepEl) {
+            let className = 'w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ';
+            
+            if (i < step) {
+                className += 'step-completed';
+            } else if (i === step) {
+                className += 'step-active';
+            } else {
+                className += 'step-inactive';
+            }
+            
+            stepEl.className = className;
+        }
     }
     
     currentStep = step;
     
     // Initialize payment form when reaching payment step
     if (step === 4 && !cardElement) {
+        console.log('💳 Initializing payment form...');
         initializePaymentForm();
     }
+    
+    // Scroll to top when changing steps
+    window.scrollTo(0, 0);
 }
 
-// W-9 Tax Information Functions (Step 1) - Enhanced for proper W-9 handling
+// Add manual navigation buttons (call this after DOM loads)
+function addNavigationButtons() {
+    const steps = document.querySelectorAll('[id$="Step"]');
+    
+    steps.forEach((stepElement, index) => {
+        const stepNumber = index + 1;
+        const buttonContainer = document.createElement('div');
+        buttonContainer.className = 'flex justify-between mt-6 pt-6 border-t';
+        
+        // Previous button (except for step 1)
+        if (stepNumber > 1) {
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = 'Previous';
+            prevBtn.className = 'px-6 py-2 border border-gray-300 rounded-md hover:bg-gray-50';
+            prevBtn.onclick = () => showStep(stepNumber - 1);
+            buttonContainer.appendChild(prevBtn);
+        } else {
+            buttonContainer.appendChild(document.createElement('div')); // Spacer
+        }
+        
+        // Next button (except for step 5)
+        if (stepNumber < 5) {
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Next';
+            nextBtn.className = 'px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700';
+            nextBtn.onclick = () => showStep(stepNumber + 1);
+            buttonContainer.appendChild(nextBtn);
+        }
+        
+        // Only add if not already present
+        if (!stepElement.querySelector('.flex.justify-between')) {
+            stepElement.appendChild(buttonContainer);
+        }
+    });
+}
+
+// Test navigation function (for debugging)
+window.testNavigation = function() {
+    console.log('🧪 Testing navigation...');
+    showStep(1);
+    setTimeout(() => showStep(2), 1000);
+    setTimeout(() => showStep(3), 2000);
+    setTimeout(() => showStep(4), 3000);
+    setTimeout(() => showStep(5), 4000);
+    setTimeout(() => showStep(1), 5000);
+};
+
+// W-9 Tax Information Functions (Step 1)
 async function handleW9Submit(e) {
     e.preventDefault();
+    console.log('📝 Submitting W-9 form...');
     showLoading(true);
 
-    const filingStatus = document.getElementById('filingStatus').value;
+    const filingStatus = document.getElementById('filingStatus')?.value;
     const dependents = collectDependents();
     const address = {
-        street: document.getElementById('addressStreet').value,
-        city: document.getElementById('addressCity').value,
-        state: document.getElementById('addressState').value,
-        zipCode: document.getElementById('addressZip').value
+        street: document.getElementById('addressStreet')?.value || '',
+        city: document.getElementById('addressCity')?.value || '',
+        state: document.getElementById('addressState')?.value || '',
+        zipCode: document.getElementById('addressZip')?.value || ''
     };
 
-    // Enhanced W-9 data collection
     const w9Data = {
         filingStatus,
         dependents,
@@ -244,20 +391,131 @@ async function handleW9Submit(e) {
         const data = await response.json();
 
         if (response.ok) {
+            console.log('✅ W-9 form saved successfully');
             showAlert('W-9 tax information saved successfully!', 'success');
-            showStep(2);
+            showStep(2); // Navigate to next step
         } else {
+            console.error('❌ W-9 save failed:', data.message);
             showAlert(data.message || 'Failed to save tax information', 'error');
         }
     } catch (error) {
+        console.error('❌ W-9 submit error:', error);
         showAlert('Failed to save tax information', 'error');
     } finally {
         showLoading(false);
     }
 }
 
+// File Upload Functions (Step 2)
+async function handleFileUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    console.log('📁 Uploading file:', file.name);
+    showLoading(true);
+
+    const formData = new FormData();
+    formData.append('w2Document', file);
+
+    try {
+        const response = await fetch('/api/upload/w2', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${authToken}`
+            },
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            console.log('✅ File uploaded successfully');
+            showAlert('W-2 uploaded and processed successfully!', 'success');
+            displayUploadedDocument(file.name, data.extractedData);
+            
+            const continueBtn = document.getElementById('continueToReview');
+            if (continueBtn) {
+                continueBtn.disabled = false;
+                continueBtn.textContent = 'Generate Form 1040';
+            }
+        } else {
+            console.error('❌ Upload failed:', data.message);
+            showAlert(data.message || 'Upload failed', 'error');
+        }
+    } catch (error) {
+        console.error('❌ Upload error:', error);
+        showAlert('Upload failed. Please try again.', 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
+function displayUploadedDocument(filename, extractedData) {
+    const container = document.getElementById('uploadedDocs');
+    if (!container) return;
+    
+    const docDiv = document.createElement('div');
+    docDiv.className = 'p-4 bg-green-50 border border-green-200 rounded-lg';
+    docDiv.innerHTML = `
+        <div class="flex items-center justify-between">
+            <div>
+                <h4 class="font-medium text-green-900">${filename}</h4>
+                <p class="text-sm text-green-700">Processed successfully</p>
+                ${extractedData.wages ? `<p class="text-xs text-green-600">Wages: $${parseFloat(extractedData.wages).toLocaleString()}</p>` : ''}
+                ${extractedData.federalTaxWithheld ? `<p class="text-xs text-green-600">Federal Tax Withheld: $${parseFloat(extractedData.federalTaxWithheld).toLocaleString()}</p>` : ''}
+            </div>
+            <svg class="h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+            </svg>
+        </div>
+    `;
+    container.appendChild(docDiv);
+}
+
+// Form 1040 Generation (Step 3)
+async function generateForm1040() {
+    console.log('📋 Generating Form 1040...');
+    showLoading(true);
+
+    try {
+        const response = await fetch('/api/tax/generate-1040', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            console.log('✅ Form 1040 generated successfully');
+            displayForm1040(data.form1040);
+            showStep(3); // Navigate to review step
+            showAlert('Form 1040 generated successfully!', 'success');
+            
+            // Update step title
+            const reviewTitle = document.querySelector('#reviewStep h3');
+            if (reviewTitle) {
+                reviewTitle.textContent = 'Review Your Tax Return (Form 1040)';
+            }
+        } else {
+            console.error('❌ Form generation failed:', data.message);
+            showAlert(data.message || 'Failed to generate form', 'error');
+        }
+    } catch (error) {
+        console.error('❌ Form generation error:', error);
+        showAlert('Failed to generate form', 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
+// Helper Functions
 function addDependentFields() {
     const container = document.getElementById('dependentsContainer');
+    if (!container) return;
+    
     const dependentIndex = container.children.length;
     
     const dependentDiv = document.createElement('div');
@@ -278,7 +536,10 @@ function addDependentFields() {
 
 function collectDependents() {
     const dependents = [];
-    document.getElementById('dependentsContainer').querySelectorAll('div').forEach(div => {
+    const container = document.getElementById('dependentsContainer');
+    if (!container) return dependents;
+    
+    container.querySelectorAll('div').forEach(div => {
         const name = div.querySelector('.dependent-name')?.value;
         const ssn = div.querySelector('.dependent-ssn')?.value;
         const relationship = div.querySelector('.dependent-relationship')?.value;
@@ -291,17 +552,68 @@ function collectDependents() {
     return dependents;
 }
 
-// Enhanced W-9 Integration Functions
+// Load existing user data
+async function loadUserData() {
+    try {
+        console.log('👤 Loading user data...');
+        const response = await fetch('/api/auth/me', {
+            headers: {
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+
+        if (response.ok) {
+            const userData = await response.json();
+            currentUser = userData;
+            console.log('✅ User data loaded');
+            
+            // Pre-fill forms with existing data
+            if (userData.taxInfo) {
+                populateTaxInfoForm(userData.taxInfo);
+            }
+            
+            // Determine current step based on progress
+            determineCurrentStep(userData);
+        }
+    } catch (error) {
+        console.error('❌ Failed to load user data:', error);
+    }
+}
+
+function determineCurrentStep(userData) {
+    console.log('🎯 Determining current step from user data...');
+    
+    if (!userData.taxInfo || !userData.taxInfo.filingStatus) {
+        console.log('📍 Starting at step 1 - no tax info');
+        showStep(1);
+    } else if (!userData.documents || userData.documents.filter(doc => doc.type === 'w2').length === 0) {
+        console.log('📍 Starting at step 2 - no W-2 documents');
+        showStep(2);
+    } else if (!userData.taxReturn || !userData.taxReturn.form1040) {
+        console.log('📍 Starting at step 2 - no Form 1040');
+        showStep(2);
+    } else if (!userData.payments || userData.payments.length === 0) {
+        console.log('📍 Starting at step 3 - no payments');
+        showStep(3);
+    } else if (userData.taxReturn.status === 'draft' || userData.taxReturn.status === 'review') {
+        console.log('📍 Starting at step 5 - ready to submit');
+        showStep(5);
+    } else {
+        console.log('📍 Tax return already submitted - showing completion');
+        showCompletedStatus(userData);
+    }
+}
+
+// Add W-9 specific fields
 function addW9Fields() {
-    // Add W-9 specific fields to the tax info form
     const taxInfoForm = document.getElementById('taxInfoForm');
-    const existingFields = taxInfoForm.querySelector('.space-y-6');
+    const existingFields = taxInfoForm?.querySelector('.space-y-6');
     
     if (!existingFields || document.getElementById('taxClassification')) {
         return; // Already added or form not found
     }
     
-    // Add tax classification section
+    // Add the W-9 fields HTML (same as before)
     const taxClassificationHTML = `
         <div class="bg-blue-50 p-4 rounded-lg">
             <h4 class="text-lg font-medium text-gray-900 mb-4">Tax Classification (W-9 Information)</h4>
@@ -356,6 +668,7 @@ function addW9Fields() {
     }
 }
 
+// Formatting functions
 function formatSSNInput(input) {
     let value = input.value.replace(/\D/g, '');
     if (value.length >= 6) {
@@ -374,98 +687,129 @@ function formatEINInput(input) {
     input.value = value;
 }
 
-// File Upload Functions (Step 2)
-async function handleFileUpload(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    showLoading(true);
-
-    const formData = new FormData();
-    formData.append('w2Document', file);
-
-    try {
-        const response = await fetch('/api/upload/w2', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${authToken}`
-            },
-            body: formData
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-            showAlert('W-2 uploaded and processed successfully!', 'success');
-            displayUploadedDocument(file.name, data.extractedData);
-            document.getElementById('continueToReview').disabled = false;
-        } else {
-            showAlert(data.message || 'Upload failed', 'error');
-        }
-    } catch (error) {
-        showAlert('Upload failed. Please try again.', 'error');
-    } finally {
-        showLoading(false);
+// Utility Functions
+function showLoading(show) {
+    const spinner = document.getElementById('loadingSpinner');
+    if (spinner) {
+        spinner.classList.toggle('hidden', !show);
     }
 }
 
-function displayUploadedDocument(filename, extractedData) {
-    const container = document.getElementById('uploadedDocs');
-    const docDiv = document.createElement('div');
-    docDiv.className = 'p-4 bg-green-50 border border-green-200 rounded-lg';
-    docDiv.innerHTML = `
+function showAlert(message, type = 'info') {
+    console.log(`📢 ${type.toUpperCase()}: ${message}`);
+    
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 max-w-md ${
+        type === 'success' ? 'bg-green-500 text-white' :
+        type === 'error' ? 'bg-red-500 text-white' :
+        type === 'warning' ? 'bg-yellow-500 text-black' :
+        'bg-blue-500 text-white'
+    }`;
+    alertDiv.innerHTML = `
         <div class="flex items-center justify-between">
-            <div>
-                <h4 class="font-medium text-green-900">${filename}</h4>
-                <p class="text-sm text-green-700">Processed successfully</p>
-                ${extractedData.wages ? `<p class="text-xs text-green-600">Wages: $${parseFloat(extractedData.wages).toLocaleString()}</p>` : ''}
-                ${extractedData.federalTaxWithheld ? `<p class="text-xs text-green-600">Federal Tax Withheld: $${parseFloat(extractedData.federalTaxWithheld).toLocaleString()}</p>` : ''}
-            </div>
-            <svg class="h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-            </svg>
+            <span class="text-sm font-medium">${message}</span>
+            <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-white hover:text-gray-200">
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
         </div>
     `;
-    container.appendChild(docDiv);
+    
+    document.body.appendChild(alertDiv);
+    
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.parentNode.removeChild(alertDiv);
+        }
+    }, 5000);
 }
 
-// Form 1040 Functions (Step 3) - FIXED: Changed from Form 1098 to 1040
-async function generateForm1040() {
-    showLoading(true);
+// Export functions for global access (for inline event handlers)
+window.formatSSNInput = formatSSNInput;
+window.formatEINInput = formatEINInput;
+window.showStep = showStep; // Make sure this is globally accessible
 
-    try {
-        const response = await fetch('/api/tax/generate-1040', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`
-            }
-        });
+// Debug functions
+window.debugNavigation = function() {
+    console.log('Current step:', currentStep);
+    console.log('Auth token:', authToken ? 'Present' : 'Missing');
+    console.log('Current user:', currentUser);
+    
+    // Check if all step elements exist
+    const stepElements = ['taxInfoStep', 'uploadStep', 'reviewStep', 'paymentStep', 'submissionStep'];
+    stepElements.forEach((id, index) => {
+        const element = document.getElementById(id);
+        console.log(`Step ${index + 1} (${id}):`, element ? 'Found' : 'Missing');
+    });
+};
 
-        const data = await response.json();
+// Additional missing functions to complete the implementation
 
-        if (response.ok) {
-            displayForm1040(data.form1040);
-            showStep(3);
-            showAlert('Form 1040 generated successfully!', 'success');
-            
-            // Update step title
-            const reviewTitle = document.querySelector('#reviewStep h3');
-            if (reviewTitle) {
-                reviewTitle.textContent = 'Review Your Tax Return (Form 1040)';
-            }
-        } else {
-            showAlert(data.message || 'Failed to generate form', 'error');
+function populateTaxInfoForm(taxInfo) {
+    if (taxInfo.filingStatus) {
+        const filingStatusEl = document.getElementById('filingStatus');
+        if (filingStatusEl) filingStatusEl.value = taxInfo.filingStatus;
+    }
+    
+    if (taxInfo.address) {
+        const addressStreetEl = document.getElementById('addressStreet');
+        const addressCityEl = document.getElementById('addressCity');
+        const addressStateEl = document.getElementById('addressState');
+        const addressZipEl = document.getElementById('addressZip');
+        
+        if (addressStreetEl) addressStreetEl.value = taxInfo.address.street || '';
+        if (addressCityEl) addressCityEl.value = taxInfo.address.city || '';
+        if (addressStateEl) addressStateEl.value = taxInfo.address.state || '';
+        if (addressZipEl) addressZipEl.value = taxInfo.address.zipCode || '';
+    }
+
+    // Populate W-9 specific fields
+    if (taxInfo.taxClassification) {
+        const taxClassificationEl = document.getElementById('taxClassification');
+        if (taxClassificationEl) taxClassificationEl.value = taxInfo.taxClassification;
+    }
+    
+    if (taxInfo.ssn) {
+        const taxpayerSSNEl = document.getElementById('taxpayerSSN');
+        if (taxpayerSSNEl) taxpayerSSNEl.value = taxInfo.ssn;
+    }
+    
+    if (taxInfo.ein) {
+        const taxpayerEINEl = document.getElementById('taxpayerEIN');
+        if (taxpayerEINEl) taxpayerEINEl.value = taxInfo.ein;
+    }
+    
+    if (taxInfo.dependents && taxInfo.dependents.length > 0) {
+        taxInfo.dependents.forEach(() => addDependentFields());
+        // Populate dependent fields
+        const dependentDivs = document.getElementById('dependentsContainer')?.children;
+        if (dependentDivs) {
+            taxInfo.dependents.forEach((dependent, index) => {
+                if (dependentDivs[index]) {
+                    const div = dependentDivs[index];
+                    const nameEl = div.querySelector('.dependent-name');
+                    const ssnEl = div.querySelector('.dependent-ssn');
+                    const relationshipEl = div.querySelector('.dependent-relationship');
+                    const dobEl = div.querySelector('.dependent-dob');
+                    
+                    if (nameEl) nameEl.value = dependent.name || '';
+                    if (ssnEl) ssnEl.value = dependent.ssn || '';
+                    if (relationshipEl) relationshipEl.value = dependent.relationship || '';
+                    if (dobEl) dobEl.value = dependent.dateOfBirth || '';
+                }
+            });
         }
-    } catch (error) {
-        showAlert('Failed to generate form', 'error');
-    } finally {
-        showLoading(false);
     }
 }
 
 function displayForm1040(formData) {
-    const container = document.getElementById('form1098Content');
+    const container = document.getElementById('form1098Content'); // Note: ID remains same for compatibility
+    if (!container) {
+        console.error('❌ Form display container not found');
+        return;
+    }
+    
     container.innerHTML = `
         <div class="bg-blue-50 p-6 rounded-lg mb-6">
             <h4 class="text-xl font-bold text-blue-900 mb-4">Form 1040 - U.S. Individual Income Tax Return</h4>
@@ -489,19 +833,19 @@ function displayForm1040(formData) {
                 <div class="space-y-2 text-sm">
                     <div class="flex justify-between">
                         <span>Wages (Line 1a):</span>
-                        <span class="font-medium">$${formData.income.wages.toLocaleString()}</span>
+                        <span class="font-medium">${formData.income.wages.toLocaleString()}</span>
                     </div>
                     <div class="flex justify-between">
                         <span>Taxable Interest (Line 2b):</span>
-                        <span class="font-medium">$${formData.income.taxableInterest.toLocaleString()}</span>
+                        <span class="font-medium">${formData.income.taxableInterest.toLocaleString()}</span>
                     </div>
                     <div class="flex justify-between">
                         <span>Ordinary Dividends (Line 3b):</span>
-                        <span class="font-medium">$${formData.income.ordinaryDividends.toLocaleString()}</span>
+                        <span class="font-medium">${formData.income.ordinaryDividends.toLocaleString()}</span>
                     </div>
                     <div class="flex justify-between border-t pt-2 font-bold text-green-800">
                         <span>Adjusted Gross Income (Line 11):</span>
-                        <span>$${formData.income.adjustedGrossIncome.toLocaleString()}</span>
+                        <span>${formData.income.adjustedGrossIncome.toLocaleString()}</span>
                     </div>
                 </div>
             </div>
@@ -512,15 +856,15 @@ function displayForm1040(formData) {
                 <div class="space-y-2 text-sm">
                     <div class="flex justify-between">
                         <span>Standard Deduction (Line 12a):</span>
-                        <span class="font-medium">$${formData.deductions.standardDeduction.toLocaleString()}</span>
+                        <span class="font-medium">${formData.deductions.standardDeduction.toLocaleString()}</span>
                     </div>
                     <div class="flex justify-between">
                         <span>QBI Deduction (Line 13):</span>
-                        <span class="font-medium">$${formData.deductions.qbiDeduction.toLocaleString()}</span>
+                        <span class="font-medium">${formData.deductions.qbiDeduction.toLocaleString()}</span>
                     </div>
                     <div class="flex justify-between border-t pt-2 font-bold text-yellow-800">
                         <span>Taxable Income (Line 15):</span>
-                        <span>$${formData.deductions.taxableIncome.toLocaleString()}</span>
+                        <span>${formData.deductions.taxableIncome.toLocaleString()}</span>
                     </div>
                 </div>
             </div>
@@ -531,15 +875,15 @@ function displayForm1040(formData) {
                 <div class="space-y-2 text-sm">
                     <div class="flex justify-between">
                         <span>Income Tax (Line 16):</span>
-                        <span class="font-medium">$${formData.tax.baseTax.toLocaleString()}</span>
+                        <span class="font-medium">${formData.tax.baseTax.toLocaleString()}</span>
                     </div>
                     <div class="flex justify-between">
                         <span>Other Taxes (Line 17-23):</span>
-                        <span class="font-medium">$${formData.tax.otherTaxes || 0}</span>
+                        <span class="font-medium">${formData.tax.otherTaxes || 0}</span>
                     </div>
                     <div class="flex justify-between border-t pt-2 font-bold text-red-800">
                         <span>Total Tax (Line 24):</span>
-                        <span>$${formData.tax.totalTax.toLocaleString()}</span>
+                        <span>${formData.tax.totalTax.toLocaleString()}</span>
                     </div>
                 </div>
             </div>
@@ -550,15 +894,15 @@ function displayForm1040(formData) {
                 <div class="space-y-2 text-sm">
                     <div class="flex justify-between">
                         <span>Federal Tax Withheld (Line 25a):</span>
-                        <span class="font-medium">$${formData.payments.federalIncomeTaxWithheld.toLocaleString()}</span>
+                        <span class="font-medium">${formData.payments.federalIncomeTaxWithheld.toLocaleString()}</span>
                     </div>
                     <div class="flex justify-between">
                         <span>Total Credits (Line 32):</span>
-                        <span class="font-medium">$${formData.credits.totalCredits.toLocaleString()}</span>
+                        <span class="font-medium">${formData.credits.totalCredits.toLocaleString()}</span>
                     </div>
                     <div class="flex justify-between border-t pt-2 font-bold text-purple-800">
                         <span>Total Payments (Line 33):</span>
-                        <span>$${formData.payments.totalPayments.toLocaleString()}</span>
+                        <span>${formData.payments.totalPayments.toLocaleString()}</span>
                     </div>
                 </div>
             </div>
@@ -572,10 +916,10 @@ function displayForm1040(formData) {
                     <div class="bg-white p-3 rounded border">
                         <h6 class="font-medium">W-2 #${index + 1}</h6>
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm mt-2">
-                            <div>Wages: $${w2.wages.toLocaleString()}</div>
-                            <div>Fed. Withheld: $${w2.federalWithheld.toLocaleString()}</div>
-                            <div>SS Wages: $${w2.socialSecurityWages.toLocaleString()}</div>
-                            <div>Medicare Wages: $${w2.medicareWages.toLocaleString()}</div>
+                            <div>Wages: ${w2.wages.toLocaleString()}</div>
+                            <div>Fed. Withheld: ${w2.federalWithheld.toLocaleString()}</div>
+                            <div>SS Wages: ${w2.socialSecurityWages.toLocaleString()}</div>
+                            <div>Medicare Wages: ${w2.medicareWages.toLocaleString()}</div>
                         </div>
                     </div>
                 `).join('')}
@@ -588,7 +932,7 @@ function displayForm1040(formData) {
                 ${formData.summary.isRefund ? 'REFUND DUE' : 'AMOUNT OWED'}
             </h4>
             <p class="text-3xl font-bold ${formData.summary.isRefund ? 'text-green-900' : 'text-red-900'}">
-                $${Math.abs(formData.summary.refundOrOwed).toLocaleString()}
+                ${Math.abs(formData.summary.refundOrOwed).toLocaleString()}
             </p>
             <p class="text-sm ${formData.summary.isRefund ? 'text-green-700' : 'text-red-700'} mt-2">
                 ${formData.summary.isRefund ? 
@@ -634,26 +978,42 @@ function formatAddress(address) {
 
 function enableFormEditing() {
     showAlert('Form editing enabled. You can modify the calculated values if needed.', 'info');
-    // Here you could add functionality to make form fields editable
 }
 
-// Payment Functions (Step 4)
 function initializePaymentForm() {
-    const elements = stripe.elements();
-    cardElement = elements.create('card');
-    cardElement.mount('#card-element');
+    if (!stripe) {
+        console.error('❌ Stripe not initialized');
+        return;
+    }
 
-    cardElement.on('change', function(event) {
-        const displayError = document.getElementById('card-errors');
-        if (event.error) {
-            displayError.textContent = event.error.message;
-        } else {
-            displayError.textContent = '';
+    try {
+        const elements = stripe.elements();
+        cardElement = elements.create('card');
+        
+        const cardElementContainer = document.getElementById('card-element');
+        if (cardElementContainer) {
+            cardElement.mount('#card-element');
+
+            cardElement.on('change', function(event) {
+                const displayError = document.getElementById('card-errors');
+                if (displayError) {
+                    if (event.error) {
+                        displayError.textContent = event.error.message;
+                    } else {
+                        displayError.textContent = '';
+                    }
+                }
+            });
+            
+            console.log('✅ Payment form initialized');
         }
-    });
+    } catch (error) {
+        console.error('❌ Payment form initialization failed:', error);
+    }
 }
 
 async function handlePayment() {
+    console.log('💳 Processing payment...');
     showLoading(true);
 
     try {
@@ -685,6 +1045,7 @@ async function handlePayment() {
         });
 
         if (error) {
+            console.error('❌ Payment failed:', error);
             showAlert(error.message, 'error');
         } else {
             // Confirm payment on backend
@@ -703,21 +1064,24 @@ async function handlePayment() {
             const confirmData = await confirmResponse.json();
 
             if (confirmResponse.ok) {
+                console.log('✅ Payment successful');
                 showAlert('Payment successful!', 'success');
-                showStep(5);
+                showStep(5); // Navigate to final step
             } else {
+                console.error('❌ Payment confirmation failed:', confirmData.message);
                 showAlert(confirmData.message || 'Payment confirmation failed', 'error');
             }
         }
     } catch (error) {
+        console.error('❌ Payment error:', error);
         showAlert('Payment failed. Please try again.', 'error');
     } finally {
         showLoading(false);
     }
 }
 
-// Final Submission (Step 5)
 async function handleFinalSubmission() {
+    console.log('📤 Submitting tax return...');
     showLoading(true);
 
     try {
@@ -732,116 +1096,36 @@ async function handleFinalSubmission() {
         const data = await response.json();
 
         if (response.ok) {
-            document.getElementById('submissionStep').classList.add('hidden');
-            document.getElementById('successMessage').classList.remove('hidden');
-            document.getElementById('submissionId').textContent = data.submissionId || generateSubmissionId();
+            console.log('✅ Tax return submitted successfully');
+            document.getElementById('submissionStep')?.classList.add('hidden');
+            document.getElementById('successMessage')?.classList.remove('hidden');
+            
+            const submissionIdEl = document.getElementById('submissionId');
+            if (submissionIdEl) {
+                submissionIdEl.textContent = data.submissionId || generateSubmissionId();
+            }
+            
             showAlert('Tax return submitted successfully!', 'success');
         } else {
+            console.error('❌ Submission failed:', data.message);
             showAlert(data.message || 'Submission failed', 'error');
         }
     } catch (error) {
+        console.error('❌ Submission error:', error);
         showAlert('Submission failed. Please try again.', 'error');
     } finally {
         showLoading(false);
     }
 }
 
-// Utility Functions
-async function loadUserData() {
-    try {
-        const response = await fetch('/api/auth/me', {
-            headers: {
-                'Authorization': `Bearer ${authToken}`
-            }
-        });
-
-        if (response.ok) {
-            const userData = await response.json();
-            currentUser = userData;
-            
-            // Pre-fill forms with existing data
-            if (userData.taxInfo) {
-                populateTaxInfoForm(userData.taxInfo);
-            }
-            
-            // Check progress and show appropriate step
-            determineCurrentStep(userData);
-        }
-    } catch (error) {
-        console.error('Failed to load user data:', error);
-    }
+function generateSubmissionId() {
+    return 'TX' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substr(2, 5).toUpperCase();
 }
 
-function populateTaxInfoForm(taxInfo) {
-    if (taxInfo.filingStatus) {
-        const filingStatusEl = document.getElementById('filingStatus');
-        if (filingStatusEl) filingStatusEl.value = taxInfo.filingStatus;
-    }
-    
-    if (taxInfo.address) {
-        const addressStreetEl = document.getElementById('addressStreet');
-        const addressCityEl = document.getElementById('addressCity');
-        const addressStateEl = document.getElementById('addressState');
-        const addressZipEl = document.getElementById('addressZip');
-        
-        if (addressStreetEl) addressStreetEl.value = taxInfo.address.street || '';
-        if (addressCityEl) addressCityEl.value = taxInfo.address.city || '';
-        if (addressStateEl) addressStateEl.value = taxInfo.address.state || '';
-        if (addressZipEl) addressZipEl.value = taxInfo.address.zipCode || '';
-    }
-
-    // Populate W-9 specific fields
-    if (taxInfo.taxClassification) {
-        const taxClassificationEl = document.getElementById('taxClassification');
-        if (taxClassificationEl) taxClassificationEl.value = taxInfo.taxClassification;
-    }
-    
-    if (taxInfo.ssn) {
-        const taxpayerSSNEl = document.getElementById('taxpayerSSN');
-        if (taxpayerSSNEl) taxpayerSSNEl.value = taxInfo.ssn;
-    }
-    
-    if (taxInfo.ein) {
-        const taxpayerEINEl = document.getElementById('taxpayerEIN');
-        if (taxpayerEINEl) taxpayerEINEl.value = taxInfo.ein;
-    }
-    
-    if (taxInfo.dependents && taxInfo.dependents.length > 0) {
-        taxInfo.dependents.forEach(() => addDependentFields());
-        // Populate dependent fields
-        const dependentDivs = document.getElementById('dependentsContainer').children;
-        taxInfo.dependents.forEach((dependent, index) => {
-            if (dependentDivs[index]) {
-                const div = dependentDivs[index];
-                const nameEl = div.querySelector('.dependent-name');
-                const ssnEl = div.querySelector('.dependent-ssn');
-                const relationshipEl = div.querySelector('.dependent-relationship');
-                const dobEl = div.querySelector('.dependent-dob');
-                
-                if (nameEl) nameEl.value = dependent.name || '';
-                if (ssnEl) ssnEl.value = dependent.ssn || '';
-                if (relationshipEl) relationshipEl.value = dependent.relationship || '';
-                if (dobEl) dobEl.value = dependent.dateOfBirth || '';
-            }
-        });
-    }
-}
-
-function determineCurrentStep(userData) {
-    // Determine which step to show based on user's progress
-    if (!userData.taxInfo || !userData.taxInfo.filingStatus) {
-        showStep(1);
-    } else if (!userData.documents || userData.documents.filter(doc => doc.type === 'w2').length === 0) {
-        showStep(2);
-    } else if (!userData.taxReturn || !userData.taxReturn.form1040) {
-        showStep(2);
-    } else if (!userData.payments || userData.payments.length === 0) {
-        showStep(3);
-    } else if (userData.taxReturn.status === 'draft' || userData.taxReturn.status === 'review') {
-        showStep(5);
-    } else {
-        // Show success if already submitted
-        document.getElementById('dashboardSection').innerHTML = `
+function showCompletedStatus(userData) {
+    const dashboardSection = document.getElementById('dashboardSection');
+    if (dashboardSection) {
+        dashboardSection.innerHTML = `
             <div class="bg-white rounded-lg shadow p-6 text-center">
                 <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-4">
                     <svg class="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -856,102 +1140,13 @@ function determineCurrentStep(userData) {
     }
 }
 
-function showLoading(show) {
-    const spinner = document.getElementById('loadingSpinner');
-    if (spinner) {
-        spinner.classList.toggle('hidden', !show);
-    }
-}
-
-function showAlert(message, type = 'info') {
-    // Create alert element
-    const alertDiv = document.createElement('div');
-    alertDiv.className = `fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 max-w-md ${
-        type === 'success' ? 'bg-green-500 text-white' :
-        type === 'error' ? 'bg-red-500 text-white' :
-        type === 'warning' ? 'bg-yellow-500 text-black' :
-        'bg-blue-500 text-white'
-    }`;
-    alertDiv.innerHTML = `
-        <div class="flex items-center justify-between">
-            <span class="text-sm font-medium">${message}</span>
-            <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-white hover:text-gray-200">
-                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
-            </button>
-        </div>
-    `;
-    
-    document.body.appendChild(alertDiv);
-    
-    // Remove alert after 5 seconds
+// Initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    // Add navigation buttons after a short delay
     setTimeout(() => {
-        if (alertDiv.parentNode) {
-            alertDiv.parentNode.removeChild(alertDiv);
-        }
-    }, 5000);
-}
-
-function generateSubmissionId() {
-    return 'TX' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substr(2, 5).toUpperCase();
-}
-
-// Enhanced OCR Processing for W-2 forms
-function enhanceOCRExtraction(text) {
-    const enhancedPatterns = {
-        employerName: /(?:employer|company)[:\s]*([^\n\r]{2,50})/i,
-        employerEIN: /(?:employer.*ein|ein)[:\s]*(\d{2}-\d{7})/i,
-        employeeSSN: /(?:employee.*ssn|social.*security)[:\s]*(\d{3}-\d{2}-\d{4})/i,
-        wages: /(?:wages.*tips.*compensation|box\s*1)[:\s]*\$?([\d,]+\.?\d*)/i,
-        federalTaxWithheld: /(?:federal.*income.*tax.*withheld|box\s*2)[:\s]*\$?([\d,]+\.?\d*)/i,
-        socialSecurityWages: /(?:social.*security.*wages|box\s*3)[:\s]*\$?([\d,]+\.?\d*)/i,
-        socialSecurityTax: /(?:social.*security.*tax.*withheld|box\s*4)[:\s]*\$?([\d,]+\.?\d*)/i,
-        medicareWages: /(?:medicare.*wages.*tips|box\s*5)[:\s]*\$?([\d,]+\.?\d*)/i,
-        medicareTax: /(?:medicare.*tax.*withheld|box\s*6)[:\s]*\$?([\d,]+\.?\d*)/i,
-        stateWages: /(?:state.*wages|box\s*16)[:\s]*\$?([\d,]+\.?\d*)/i,
-        stateTax: /(?:state.*tax|box\s*17)[:\s]*\$?([\d,]+\.?\d*)/i
-    };
-
-    const extractedData = {};
-    
-    for (const [field, pattern] of Object.entries(enhancedPatterns)) {
-        const match = text.match(pattern);
-        if (match) {
-            let value = match[1] || match[0];
-            
-            // Clean up monetary values
-            if (field.includes('wages') || field.includes('tax') || field.includes('Tax')) {
-                value = value.replace(/[,$]/g, '');
-                if (!isNaN(value)) {
-                    extractedData[field] = parseFloat(value);
-                }
-            } else {
-                extractedData[field] = value.trim();
-            }
-        }
-    }
-
-    return extractedData;
-}
-
-// Export functions for global access (for inline event handlers)
-window.formatSSNInput = formatSSNInput;
-window.formatEINInput = formatEINInput;
-
-// Enhanced error handling
-window.addEventListener('error', function(event) {
-    console.error('Global error:', event.error);
-    showAlert('An unexpected error occurred. Please try again.', 'error');
+        addNavigationButtons();
+        console.log('✅ Navigation buttons added');
+    }, 500);
 });
 
-// Enhanced fetch error handling
-const originalFetch = window.fetch;
-window.fetch = function(...args) {
-    return originalFetch.apply(this, args)
-        .catch(error => {
-            console.error('Fetch error:', error);
-            showAlert('Network error. Please check your connection.', 'error');
-            throw error;
-        });
-};
+console.log('📱 AI Tax Filing App Script Loaded Successfully');
