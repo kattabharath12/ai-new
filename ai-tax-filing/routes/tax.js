@@ -1,12 +1,12 @@
-// routes/tax.js - PostgreSQL Version
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const User = require('../models/User');
+const { User } = require('../database/index'); // Fixed import path
 const auth = require('../middleware/auth');
+const { Op } = require('sequelize');
 
 const router = express.Router();
 
-// Update tax information (W-9 form data)
+// Update tax information
 router.put('/info', auth, [
   body('filingStatus').isIn(['single', 'married-joint', 'married-separate', 'head-of-household', 'qualifying-widow'])
 ], async (req, res) => {
@@ -16,20 +16,27 @@ router.put('/info', auth, [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { filingStatus, dependents, address, taxClassification, ssn, ein } = req.body;
+    const { filingStatus, dependents, address, w9Data } = req.body;
 
-    const taxInfoData = {
+    const user = await User.findByPk(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Update taxInfo with both traditional and W-9 data
+    const updatedTaxInfo = {
       filingStatus,
       dependents: dependents || [],
       address: address || {},
-      taxClassification: taxClassification || 'individual',
-      ssn: ssn || '',
-      ein: ein || ''
+      w9: w9Data || {} // Add W-9 data
     };
 
-    await User.updateTaxInfo(req.userId, taxInfoData);
+    await user.update({ taxInfo: updatedTaxInfo });
 
-    res.json({ message: 'Tax information updated successfully' });
+    res.json({ 
+      message: 'Tax information updated successfully', 
+      taxInfo: updatedTaxInfo 
+    });
   } catch (error) {
     console.error('Tax info update error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -39,7 +46,10 @@ router.put('/info', auth, [
 // Get tax information
 router.get('/info', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.userId);
+    const user = await User.findByPk(req.userId, {
+      attributes: ['taxInfo']
+    });
+    
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -51,257 +61,166 @@ router.get('/info', auth, async (req, res) => {
   }
 });
 
-// Generate Form 1040 (FIXED: was 1098)
-router.post('/generate-1040', auth, async (req, res) => {
+// Generate 1098 form data
+router.post('/generate-1098', auth, async (req, res) => {
+  console.log('🔥 FORM 1098 GENERATION REQUEST RECEIVED!');
+  console.log('User ID from auth:', req.userId);
+  
   try {
-    const user = await User.findById(req.userId);
+    const user = await User.findByPk(req.userId);
     if (!user) {
+      console.log('❌ User not found:', req.userId);
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Find W-2 documents
-    const w2Documents = user.documents.filter(doc => doc.type === 'w2');
+    console.log('✅ User found for form generation:', user.email);
+    console.log('📋 Raw user.documents:', JSON.stringify(user.documents, null, 2));
+    console.log('📊 Documents array type:', typeof user.documents);
+    console.log('📊 Documents array length:', user.documents ? user.documents.length : 'NULL');
+
+    // Find W-2 documents from user.documents array
+    const documents = user.documents || [];
+    console.log('📋 Documents after null check:', documents);
+    console.log('📊 Is documents an array?', Array.isArray(documents));
+    
+    const w2Documents = documents.filter(doc => {
+      console.log('🔍 Checking document:', JSON.stringify(doc, null, 2));
+      console.log('🔍 Document type:', doc.type);
+      console.log('🔍 Type comparison result:', doc.type === 'w2');
+      return doc.type === 'w2';
+    });
+    
+    console.log('📋 Filtered W-2 documents:', JSON.stringify(w2Documents, null, 2));
+    console.log('📊 W-2 documents count:', w2Documents.length);
     
     if (w2Documents.length === 0) {
+      console.log('❌ NO W-2 DOCUMENTS FOUND AFTER FILTERING!');
+      console.log('📋 All documents for debugging:', JSON.stringify(documents, null, 2));
       return res.status(400).json({ message: 'No W-2 documents found. Please upload W-2 first.' });
     }
 
-    // Calculate total income from all W-2s
-    const totalWages = w2Documents.reduce((total, doc) => {
-      const wages = doc.extractedData?.wages || 0;
-      return total + (typeof wages === 'string' ? parseFloat(wages) : wages);
-    }, 0);
+    console.log('✅ Found W-2 documents, proceeding with form generation...');
 
-    const totalFederalWithheld = w2Documents.reduce((total, doc) => {
-      const withheld = doc.extractedData?.federalTaxWithheld || 0;
-      return total + (typeof withheld === 'string' ? parseFloat(withheld) : withheld);
-    }, 0);
-
-    const totalSocialSecurityWages = w2Documents.reduce((total, doc) => {
-      const ssWages = doc.extractedData?.socialSecurityWages || 0;
-      return total + (typeof ssWages === 'string' ? parseFloat(ssWages) : ssWages);
-    }, 0);
-
-    const totalMedicareWages = w2Documents.reduce((total, doc) => {
-      const medWages = doc.extractedData?.medicareWages || 0;
-      return total + (typeof medWages === 'string' ? parseFloat(medWages) : medWages);
-    }, 0);
-
-    // Determine standard deduction based on filing status (2024 values)
-    const getStandardDeduction = (filingStatus) => {
-      const deductions = {
-        'single': 14600,
-        'married-joint': 29200,
-        'married-separate': 14600,
-        'head-of-household': 21900,
-        'qualifying-widow': 29200
-      };
-      return deductions[filingStatus] || 14600;
-    };
-
-    const standardDeduction = getStandardDeduction(user.taxInfo.filingStatus);
-    const adjustedGrossIncome = totalWages;
-    const taxableIncome = Math.max(0, adjustedGrossIncome - standardDeduction);
-
-    // Calculate federal income tax using 2024 tax brackets
-    const calculateFederalTax = (taxableIncome, filingStatus) => {
-      const brackets = {
-        single: [
-          { min: 0, max: 11000, rate: 0.10 },
-          { min: 11000, max: 44725, rate: 0.12 },
-          { min: 44725, max: 95375, rate: 0.22 },
-          { min: 95375, max: 182050, rate: 0.24 },
-          { min: 182050, max: 231250, rate: 0.32 },
-          { min: 231250, max: 578125, rate: 0.35 },
-          { min: 578125, max: Infinity, rate: 0.37 }
-        ],
-        'married-joint': [
-          { min: 0, max: 22000, rate: 0.10 },
-          { min: 22000, max: 89450, rate: 0.12 },
-          { min: 89450, max: 190750, rate: 0.22 },
-          { min: 190750, max: 364200, rate: 0.24 },
-          { min: 364200, max: 462500, rate: 0.32 },
-          { min: 462500, max: 693750, rate: 0.35 },
-          { min: 693750, max: Infinity, rate: 0.37 }
-        ]
-      };
-
-      const applicableBrackets = brackets[filingStatus] || brackets.single;
-      let tax = 0;
-      let remainingIncome = taxableIncome;
-
-      for (const bracket of applicableBrackets) {
-        if (remainingIncome <= 0) break;
-        
-        const taxableAtThisBracket = Math.min(remainingIncome, bracket.max - bracket.min);
-        tax += taxableAtThisBracket * bracket.rate;
-        remainingIncome -= taxableAtThisBracket;
-      }
-
-      return Math.round(tax);
-    };
-
-    const federalIncomeTax = calculateFederalTax(taxableIncome, user.taxInfo.filingStatus);
-    const refundOrOwed = totalFederalWithheld - federalIncomeTax;
-
-    // Generate comprehensive Form 1040 data
-    const form1040Data = {
+    // Generate form data
+    const form1098Data = {
       taxYear: new Date().getFullYear() - 1,
-      formType: '1040',
-      
-      // Taxpayer Information
       taxpayer: {
         name: `${user.firstName} ${user.lastName}`,
-        ssn: user.taxInfo.ssn || '',
-        address: user.taxInfo.address || {},
-        filingStatus: user.taxInfo.filingStatus || 'single'
+        ssn: w2Documents[0].extractedData?.employeeSSN || '***-**-****',
+        address: user.taxInfo?.address || {}
       },
-      
-      // Income Section
       income: {
-        wages: totalWages,
-        taxableInterest: 0,
-        ordinaryDividends: 0,
-        iraDistributions: 0,
-        pensionsAnnuities: 0,
-        socialSecurityBenefits: 0,
-        capitalGainLoss: 0,
-        otherIncome: 0,
-        totalIncome: totalWages,
-        adjustedGrossIncome: adjustedGrossIncome
+        wages: w2Documents.reduce((total, doc) => {
+          const wages = doc.extractedData?.wages;
+          if (wages) {
+            const cleanWages = parseFloat(wages.toString().replace(/[,$]/g, '')) || 0;
+            console.log(`💰 Adding wages from ${doc.filename}: ${cleanWages}`);
+            return total + cleanWages;
+          }
+          return total;
+        }, 0),
+        federalTaxWithheld: w2Documents.reduce((total, doc) => {
+          const withheld = doc.extractedData?.federalTaxWithheld;
+          if (withheld) {
+            const cleanWithheld = parseFloat(withheld.toString().replace(/[,$]/g, '')) || 0;
+            return total + cleanWithheld;
+          }
+          return total;
+        }, 0),
+        socialSecurityWages: w2Documents.reduce((total, doc) => {
+          const ssWages = doc.extractedData?.socialSecurityWages;
+          if (ssWages) {
+            const cleanSSWages = parseFloat(ssWages.toString().replace(/[,$]/g, '')) || 0;
+            return total + cleanSSWages;
+          }
+          return total;
+        }, 0),
+        medicareWages: w2Documents.reduce((total, doc) => {
+          const medicareWages = doc.extractedData?.medicareWages;
+          if (medicareWages) {
+            const cleanMedicareWages = parseFloat(medicareWages.toString().replace(/[,$]/g, '')) || 0;
+            return total + cleanMedicareWages;
+          }
+          return total;
+        }, 0)
       },
-      
-      // Deductions Section
       deductions: {
-        standardDeduction: standardDeduction,
-        itemizedDeductions: 0,
-        qbiDeduction: 0,
-        totalDeductions: standardDeduction,
-        taxableIncome: taxableIncome
+        standardDeduction: user.taxInfo?.filingStatus === 'married-joint' ? 27700 : 13850,
+        itemizedDeductions: 0
       },
-      
-      // Tax Calculation
-      tax: {
-        baseTax: federalIncomeTax,
-        scheduleD: 0,
-        excessAdvancePTC: 0,
-        otherTaxes: 0,
-        totalTax: federalIncomeTax
-      },
-      
-      // Credits
-      credits: {
-        childTaxCredit: 0,
-        creditForOtherDependents: 0,
-        educationCredits: 0,
-        retirementSavingsCredit: 0,
-        childCareCredit: 0,
-        residentialEnergyCredit: 0,
-        otherCredits: 0,
-        totalCredits: 0,
-        taxAfterCredits: federalIncomeTax
-      },
-      
-      // Other Taxes
-      otherTaxes: {
-        selfEmploymentTax: 0,
-        unreportedSocialSecurityTax: 0,
-        additionalTax: 0,
-        totalOtherTaxes: 0
-      },
-      
-      // Payments
-      payments: {
-        federalIncomeTaxWithheld: totalFederalWithheld,
-        estimatedTaxPayments: 0,
-        earnedIncomeCredit: 0,
-        additionalChildTaxCredit: 0,
-        americanOpportunityCredit: 0,
-        netPremiumTaxCredit: 0,
-        amountPaidWithExtension: 0,
-        excessSocialSecurityWithheld: 0,
-        totalPayments: totalFederalWithheld
-      },
-      
-      // Refund or Amount Owed
-      refundOrOwed: {
-        overpaid: refundOrOwed > 0 ? refundOrOwed : 0,
-        refundAmount: refundOrOwed > 0 ? refundOrOwed : 0,
-        amountOwed: refundOrOwed < 0 ? Math.abs(refundOrOwed) : 0,
-        penalty: 0
-      },
-      
-      // Dependents Information
-      dependents: user.taxInfo.dependents || [],
-      
-      // W-2 Information
-      w2Information: w2Documents.map(doc => ({
-        employer: doc.extractedData?.employerName || 'Unknown',
-        ein: doc.extractedData?.employerEIN || '',
-        wages: parseFloat(doc.extractedData?.wages) || 0,
-        federalWithheld: parseFloat(doc.extractedData?.federalTaxWithheld) || 0,
-        socialSecurityWages: parseFloat(doc.extractedData?.socialSecurityWages) || 0,
-        medicareWages: parseFloat(doc.extractedData?.medicareWages) || 0
-      })),
-      
-      // Summary
-      summary: {
-        totalIncome: adjustedGrossIncome,
-        totalDeductions: standardDeduction,
-        taxableIncome: taxableIncome,
-        totalTax: federalIncomeTax,
-        totalWithheld: totalFederalWithheld,
-        refundOrOwed: refundOrOwed,
-        isRefund: refundOrOwed > 0
-      }
+      filingStatus: user.taxInfo?.filingStatus || 'single',
+      dependents: user.taxInfo?.dependents || []
     };
 
-    // Save the generated form
-    await User.updateTaxReturn(req.userId, form1040Data);
+    console.log('📋 Generated form data:', JSON.stringify(form1098Data, null, 2));
+
+    // Update user's tax return
+    const updatedTaxReturn = {
+      ...user.taxReturn,
+      form1040: form1098Data,
+      status: 'review'
+    };
+
+    await user.update({ taxReturn: updatedTaxReturn });
+    console.log('✅ Tax return updated in database');
+
+    console.log('🎉 FORM 1098 GENERATION COMPLETED SUCCESSFULLY!');
 
     res.json({ 
-      message: 'Form 1040 generated successfully', 
-      form1040: form1040Data 
+      message: '1098 form generated successfully', 
+      form1098: form1098Data 
     });
   } catch (error) {
-    console.error('Generate 1040 error:', error);
+    console.error('💥 Generate 1098 error:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
-// Update Form 1040
-router.put('/update-1040', auth, async (req, res) => {
+// Update 1098 form
+router.put('/update-1098', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.userId);
+    const user = await User.findByPk(req.userId);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Merge updates with existing form data
-    const updatedFormData = { ...user.taxReturn.form1040, ...req.body };
-    await User.updateTaxReturn(req.userId, updatedFormData);
+    const updatedForm = { 
+      ...user.taxReturn?.form1040, 
+      ...req.body 
+    };
+
+    const updatedTaxReturn = {
+      ...user.taxReturn,
+      form1040: updatedForm
+    };
+
+    await user.update({ taxReturn: updatedTaxReturn });
 
     res.json({ 
-      message: 'Form 1040 updated successfully', 
-      form1040: updatedFormData 
+      message: '1098 form updated successfully', 
+      form1098: updatedForm 
     });
   } catch (error) {
-    console.error('Update 1040 error:', error);
+    console.error('Update 1098 error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
-// Get Form 1040
-router.get('/form-1040', auth, async (req, res) => {
+// Get 1098 form
+router.get('/form-1098', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.userId);
+    const user = await User.findByPk(req.userId, {
+      attributes: ['taxReturn']
+    });
+    
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    res.json(user.taxReturn.form1040 || {});
+    res.json(user.taxReturn?.form1040 || {});
   } catch (error) {
-    console.error('Get 1040 error:', error);
+    console.error('Get 1098 form error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -309,36 +228,28 @@ router.get('/form-1040', auth, async (req, res) => {
 // Submit tax return
 router.post('/submit', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.userId);
+    const user = await User.findByPk(req.userId);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    if (!user.taxReturn.form1040) {
+    if (!user.taxReturn?.form1040) {
       return res.status(400).json({ message: 'No tax return data found' });
     }
 
-    // Check if payment has been made
-    if (!user.payments || user.payments.length === 0) {
-      return res.status(400).json({ message: 'Payment required before submission' });
-    }
+    const updatedTaxReturn = {
+      ...user.taxReturn,
+      status: 'submitted',
+      submissionDate: new Date()
+    };
 
-    await User.submitTaxReturn(req.userId);
+    await user.update({ taxReturn: updatedTaxReturn });
 
-    res.json({ 
-      message: 'Tax return submitted successfully',
-      submissionId: generateSubmissionId(),
-      status: 'submitted'
-    });
+    res.json({ message: 'Tax return submitted successfully' });
   } catch (error) {
     console.error('Submit tax return error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
-
-// Helper function to generate submission ID
-function generateSubmissionId() {
-  return 'TX' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substr(2, 5).toUpperCase();
-}
 
 module.exports = router;
