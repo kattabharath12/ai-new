@@ -50,8 +50,8 @@ router.get('/info', auth, async (req, res) => {
   }
 });
 
-// Generate 1098 form data
-router.post('/generate-1098', auth, async (req, res) => {
+// Replace the route:
+router.post('/generate-1040', auth, async (req, res) => {  // Was: generate-1098
   try {
     const user = await User.findById(req.userId);
     if (!user) {
