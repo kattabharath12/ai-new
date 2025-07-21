@@ -3,7 +3,7 @@ const multer = require('multer');
 const Tesseract = require('tesseract.js');
 const fs = require('fs');
 const path = require('path');
-const { User } = require('../database');
+const { User } = require('../database/index'); // Fixed import path
 const auth = require('../middleware/auth');
 
 const router = express.Router();
