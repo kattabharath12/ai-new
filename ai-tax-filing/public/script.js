@@ -7,8 +7,8 @@ let currentUser = null;
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialize Stripe
-    stripe = Stripe('pk_test_51234567890abcdef'); // Replace with your Stripe publishable key
+    // Initialize Stripe - REPLACE WITH YOUR ACTUAL PUBLISHABLE KEY
+    stripe = Stripe('pk_test_your_actual_stripe_publishable_key_here');
     
     if (authToken) {
         showDashboard();
@@ -18,6 +18,13 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     initializeEventListeners();
+    
+    // Add W-9 fields to the tax info form after DOM loads
+    setTimeout(() => {
+        if (document.getElementById('taxInfoForm')) {
+            addW9Fields();
+        }
+    }, 100);
 });
 
 // Event Listeners
@@ -29,16 +36,16 @@ function initializeEventListeners() {
     document.getElementById('showLogin').addEventListener('click', () => toggleAuthForms('login'));
     document.getElementById('logoutBtn').addEventListener('click', handleLogout);
 
-    // Tax info form
-    document.getElementById('taxInfoForm').addEventListener('submit', handleTaxInfoSubmit);
+    // W-9 Tax info form (Step 1) - Updated for W-9
+    document.getElementById('taxInfoForm').addEventListener('submit', handleW9Submit);
     document.getElementById('addDependent').addEventListener('click', addDependentFields);
 
-    // File upload
+    // File upload (Step 2)
     document.getElementById('uploadArea').addEventListener('click', () => document.getElementById('w2Upload').click());
     document.getElementById('w2Upload').addEventListener('change', handleFileUpload);
-    document.getElementById('continueToReview').addEventListener('click', generateForm1098);
+    document.getElementById('continueToReview').addEventListener('click', generateForm1040); // Fixed: was generateForm1098
 
-    // Review and payment
+    // Review and payment (Steps 3-4)
     document.getElementById('editForm').addEventListener('click', enableFormEditing);
     document.getElementById('proceedToPayment').addEventListener('click', () => showStep(4));
     document.getElementById('submitPayment').addEventListener('click', handlePayment);
@@ -140,6 +147,22 @@ function showDashboard() {
     if (currentUser) {
         document.getElementById('userEmail').textContent = currentUser.email;
     }
+    
+    // Update step labels to reflect correct form names
+    updateStepLabels();
+}
+
+function updateStepLabels() {
+    const stepLabels = document.querySelector('.mt-2.flex.justify-between');
+    if (stepLabels) {
+        stepLabels.innerHTML = `
+            <span>W-9 Info</span>
+            <span>Upload W-2</span>
+            <span>Review 1040</span>
+            <span>Payment</span>
+            <span>Submit</span>
+        `;
+    }
 }
 
 function toggleAuthForms(form) {
@@ -184,8 +207,8 @@ function showStep(step) {
     }
 }
 
-// Tax Information Functions
-async function handleTaxInfoSubmit(e) {
+// W-9 Tax Information Functions (Step 1) - Enhanced for proper W-9 handling
+async function handleW9Submit(e) {
     e.preventDefault();
     showLoading(true);
 
@@ -198,6 +221,16 @@ async function handleTaxInfoSubmit(e) {
         zipCode: document.getElementById('addressZip').value
     };
 
+    // Enhanced W-9 data collection
+    const w9Data = {
+        filingStatus,
+        dependents,
+        address,
+        taxClassification: document.getElementById('taxClassification')?.value || 'individual',
+        ssn: document.getElementById('taxpayerSSN')?.value || '',
+        ein: document.getElementById('taxpayerEIN')?.value || ''
+    };
+
     try {
         const response = await fetch('/api/tax/info', {
             method: 'PUT',
@@ -205,13 +238,13 @@ async function handleTaxInfoSubmit(e) {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${authToken}`
             },
-            body: JSON.stringify({ filingStatus, dependents, address })
+            body: JSON.stringify(w9Data)
         });
 
         const data = await response.json();
 
         if (response.ok) {
-            showAlert('Tax information saved successfully!', 'success');
+            showAlert('W-9 tax information saved successfully!', 'success');
             showStep(2);
         } else {
             showAlert(data.message || 'Failed to save tax information', 'error');
@@ -233,7 +266,7 @@ function addDependentFields() {
         <h5 class="font-medium text-gray-900">Dependent ${dependentIndex + 1}</h5>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <input type="text" placeholder="Full Name" class="dependent-name rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border">
-            <input type="text" placeholder="SSN (xxx-xx-xxxx)" class="dependent-ssn rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border">
+            <input type="text" placeholder="SSN (xxx-xx-xxxx)" class="dependent-ssn rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border" oninput="formatSSNInput(this)">
             <input type="text" placeholder="Relationship" class="dependent-relationship rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border">
             <input type="date" placeholder="Date of Birth" class="dependent-dob rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border">
         </div>
@@ -258,7 +291,90 @@ function collectDependents() {
     return dependents;
 }
 
-// File Upload Functions
+// Enhanced W-9 Integration Functions
+function addW9Fields() {
+    // Add W-9 specific fields to the tax info form
+    const taxInfoForm = document.getElementById('taxInfoForm');
+    const existingFields = taxInfoForm.querySelector('.space-y-6');
+    
+    if (!existingFields || document.getElementById('taxClassification')) {
+        return; // Already added or form not found
+    }
+    
+    // Add tax classification section
+    const taxClassificationHTML = `
+        <div class="bg-blue-50 p-4 rounded-lg">
+            <h4 class="text-lg font-medium text-gray-900 mb-4">Tax Classification (W-9 Information)</h4>
+            <div class="space-y-3">
+                <label class="block text-sm font-medium text-gray-700">Federal Tax Classification</label>
+                <select id="taxClassification" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 border">
+                    <option value="individual">Individual/sole proprietor or single-member LLC</option>
+                    <option value="c-corp">C Corporation</option>
+                    <option value="s-corp">S Corporation</option>
+                    <option value="partnership">Partnership</option>
+                    <option value="trust">Trust/estate</option>
+                    <option value="llc">Limited liability company</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+        </div>
+    `;
+
+    const tinHTML = `
+        <div class="bg-yellow-50 p-4 rounded-lg">
+            <h4 class="text-lg font-medium text-gray-900 mb-4">Taxpayer Identification Numbers</h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Social Security Number (SSN)</label>
+                    <input type="text" id="taxpayerSSN" placeholder="XXX-XX-XXXX" maxlength="11"
+                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 border"
+                           oninput="formatSSNInput(this)">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Employer Identification Number (EIN)</label>
+                    <input type="text" id="taxpayerEIN" placeholder="XX-XXXXXXX" maxlength="10"
+                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 border"
+                           oninput="formatEINInput(this)">
+                </div>
+            </div>
+            <p class="text-xs text-gray-600 mt-2">
+                For individuals, enter your SSN. For businesses, enter your EIN. At least one is required.
+            </p>
+        </div>
+    `;
+    
+    // Insert before the dependents section
+    const dependentsSection = existingFields.querySelector('div:has(#dependentsContainer)')?.parentElement;
+    if (dependentsSection) {
+        const classificationDiv = document.createElement('div');
+        classificationDiv.innerHTML = taxClassificationHTML;
+        existingFields.insertBefore(classificationDiv.firstElementChild, dependentsSection);
+        
+        const tinDiv = document.createElement('div');
+        tinDiv.innerHTML = tinHTML;
+        existingFields.insertBefore(tinDiv.firstElementChild, dependentsSection);
+    }
+}
+
+function formatSSNInput(input) {
+    let value = input.value.replace(/\D/g, '');
+    if (value.length >= 6) {
+        value = value.substring(0, 3) + '-' + value.substring(3, 5) + '-' + value.substring(5, 9);
+    } else if (value.length >= 4) {
+        value = value.substring(0, 3) + '-' + value.substring(3);
+    }
+    input.value = value;
+}
+
+function formatEINInput(input) {
+    let value = input.value.replace(/\D/g, '');
+    if (value.length >= 3) {
+        value = value.substring(0, 2) + '-' + value.substring(2, 9);
+    }
+    input.value = value;
+}
+
+// File Upload Functions (Step 2)
 async function handleFileUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -302,7 +418,8 @@ function displayUploadedDocument(filename, extractedData) {
             <div>
                 <h4 class="font-medium text-green-900">${filename}</h4>
                 <p class="text-sm text-green-700">Processed successfully</p>
-                ${extractedData.wages ? `<p class="text-xs text-green-600">Wages: $${extractedData.wages}</p>` : ''}
+                ${extractedData.wages ? `<p class="text-xs text-green-600">Wages: $${parseFloat(extractedData.wages).toLocaleString()}</p>` : ''}
+                ${extractedData.federalTaxWithheld ? `<p class="text-xs text-green-600">Federal Tax Withheld: $${parseFloat(extractedData.federalTaxWithheld).toLocaleString()}</p>` : ''}
             </div>
             <svg class="h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
@@ -312,12 +429,12 @@ function displayUploadedDocument(filename, extractedData) {
     container.appendChild(docDiv);
 }
 
-// Form 1098 Functions
-async function generateForm1098() {
+// Form 1040 Functions (Step 3) - FIXED: Changed from Form 1098 to 1040
+async function generateForm1040() {
     showLoading(true);
 
     try {
-        const response = await fetch('/api/tax/generate-1098', {
+        const response = await fetch('/api/tax/generate-1040', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -328,9 +445,15 @@ async function generateForm1098() {
         const data = await response.json();
 
         if (response.ok) {
-            displayForm1098(data.form1098);
+            displayForm1040(data.form1040);
             showStep(3);
-            showAlert('Form 1098 generated successfully!', 'success');
+            showAlert('Form 1040 generated successfully!', 'success');
+            
+            // Update step title
+            const reviewTitle = document.querySelector('#reviewStep h3');
+            if (reviewTitle) {
+                reviewTitle.textContent = 'Review Your Tax Return (Form 1040)';
+            }
         } else {
             showAlert(data.message || 'Failed to generate form', 'error');
         }
@@ -341,57 +464,180 @@ async function generateForm1098() {
     }
 }
 
-function displayForm1098(formData) {
+function displayForm1040(formData) {
     const container = document.getElementById('form1098Content');
     container.innerHTML = `
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="space-y-4">
-                <h4 class="font-medium text-gray-900">Deductions</h4>
-                <div class="space-y-2 text-sm">
-                    <p><span class="font-medium">Standard Deduction:</span> ${formData.deductions.standardDeduction.toLocaleString()}</p>
-                    <p><span class="font-medium">Itemized Deductions:</span> ${formData.deductions.itemizedDeductions.toLocaleString()}</p>
+        <div class="bg-blue-50 p-6 rounded-lg mb-6">
+            <h4 class="text-xl font-bold text-blue-900 mb-4">Form 1040 - U.S. Individual Income Tax Return</h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                    <p><span class="font-medium">Tax Year:</span> ${formData.taxYear}</p>
+                    <p><span class="font-medium">Taxpayer:</span> ${formData.taxpayer.name}</p>
+                    <p><span class="font-medium">SSN:</span> ${formData.taxpayer.ssn || 'Not provided'}</p>
                 </div>
-            </div>
-            
-            <div class="space-y-4">
-                <h4 class="font-medium text-gray-900">Dependents</h4>
-                <div class="space-y-2 text-sm">
-                    ${formData.dependents.length > 0 ? 
-                        formData.dependents.map(dep => `<p>${dep.name} (${dep.relationship})</p>`).join('') :
-                        '<p>No dependents claimed</p>'
-                    }
+                <div>
+                    <p><span class="font-medium">Filing Status:</span> ${formatFilingStatus(formData.taxpayer.filingStatus)}</p>
+                    <p><span class="font-medium">Address:</span> ${formatAddress(formData.taxpayer.address)}</p>
                 </div>
             </div>
         </div>
-        
-        <div class="mt-6 p-4 bg-blue-50 rounded-lg">
-            <h4 class="font-medium text-blue-900 mb-2">Tax Calculation Summary</h4>
-            <div class="space-y-1 text-sm text-blue-800">
-                <p>Adjusted Gross Income: ${formData.income.wages.toLocaleString()}</p>
-                <p>Taxable Income: ${Math.max(0, formData.income.wages - formData.deductions.standardDeduction).toLocaleString()}</p>
-                <p>Tax Liability: ${calculateTaxLiability(formData).toLocaleString()}</p>
-                <p class="font-medium">Refund/Amount Owed: ${(formData.income.federalTaxWithheld - calculateTaxLiability(formData)).toLocaleString()}</p>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Income Section -->
+            <div class="bg-green-50 p-4 rounded-lg">
+                <h5 class="font-bold text-green-900 mb-3">Income</h5>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span>Wages (Line 1a):</span>
+                        <span class="font-medium">$${formData.income.wages.toLocaleString()}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Taxable Interest (Line 2b):</span>
+                        <span class="font-medium">$${formData.income.taxableInterest.toLocaleString()}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Ordinary Dividends (Line 3b):</span>
+                        <span class="font-medium">$${formData.income.ordinaryDividends.toLocaleString()}</span>
+                    </div>
+                    <div class="flex justify-between border-t pt-2 font-bold text-green-800">
+                        <span>Adjusted Gross Income (Line 11):</span>
+                        <span>$${formData.income.adjustedGrossIncome.toLocaleString()}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Deductions Section -->
+            <div class="bg-yellow-50 p-4 rounded-lg">
+                <h5 class="font-bold text-yellow-900 mb-3">Deductions</h5>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span>Standard Deduction (Line 12a):</span>
+                        <span class="font-medium">$${formData.deductions.standardDeduction.toLocaleString()}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>QBI Deduction (Line 13):</span>
+                        <span class="font-medium">$${formData.deductions.qbiDeduction.toLocaleString()}</span>
+                    </div>
+                    <div class="flex justify-between border-t pt-2 font-bold text-yellow-800">
+                        <span>Taxable Income (Line 15):</span>
+                        <span>$${formData.deductions.taxableIncome.toLocaleString()}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tax Calculation -->
+            <div class="bg-red-50 p-4 rounded-lg">
+                <h5 class="font-bold text-red-900 mb-3">Tax Calculation</h5>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span>Income Tax (Line 16):</span>
+                        <span class="font-medium">$${formData.tax.baseTax.toLocaleString()}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Other Taxes (Line 17-23):</span>
+                        <span class="font-medium">$${formData.tax.otherTaxes || 0}</span>
+                    </div>
+                    <div class="flex justify-between border-t pt-2 font-bold text-red-800">
+                        <span>Total Tax (Line 24):</span>
+                        <span>$${formData.tax.totalTax.toLocaleString()}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Payments & Credits -->
+            <div class="bg-purple-50 p-4 rounded-lg">
+                <h5 class="font-bold text-purple-900 mb-3">Payments & Credits</h5>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span>Federal Tax Withheld (Line 25a):</span>
+                        <span class="font-medium">$${formData.payments.federalIncomeTaxWithheld.toLocaleString()}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Total Credits (Line 32):</span>
+                        <span class="font-medium">$${formData.credits.totalCredits.toLocaleString()}</span>
+                    </div>
+                    <div class="flex justify-between border-t pt-2 font-bold text-purple-800">
+                        <span>Total Payments (Line 33):</span>
+                        <span>$${formData.payments.totalPayments.toLocaleString()}</span>
+                    </div>
+                </div>
             </div>
         </div>
+
+        <!-- W-2 Information -->
+        <div class="mt-6 bg-gray-50 p-4 rounded-lg">
+            <h5 class="font-bold text-gray-900 mb-3">W-2 Information</h5>
+            <div class="space-y-2">
+                ${formData.w2Information.map((w2, index) => `
+                    <div class="bg-white p-3 rounded border">
+                        <h6 class="font-medium">W-2 #${index + 1}</h6>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm mt-2">
+                            <div>Wages: $${w2.wages.toLocaleString()}</div>
+                            <div>Fed. Withheld: $${w2.federalWithheld.toLocaleString()}</div>
+                            <div>SS Wages: $${w2.socialSecurityWages.toLocaleString()}</div>
+                            <div>Medicare Wages: $${w2.medicareWages.toLocaleString()}</div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+
+        <!-- Refund/Amount Owed -->
+        <div class="mt-6 p-6 ${formData.summary.isRefund ? 'bg-green-100 border-green-300' : 'bg-red-100 border-red-300'} border-2 rounded-lg text-center">
+            <h4 class="text-2xl font-bold ${formData.summary.isRefund ? 'text-green-800' : 'text-red-800'} mb-2">
+                ${formData.summary.isRefund ? 'REFUND DUE' : 'AMOUNT OWED'}
+            </h4>
+            <p class="text-3xl font-bold ${formData.summary.isRefund ? 'text-green-900' : 'text-red-900'}">
+                $${Math.abs(formData.summary.refundOrOwed).toLocaleString()}
+            </p>
+            <p class="text-sm ${formData.summary.isRefund ? 'text-green-700' : 'text-red-700'} mt-2">
+                ${formData.summary.isRefund ? 
+                    'You will receive this amount as a tax refund' : 
+                    'You need to pay this amount with your tax return'
+                }
+            </p>
+        </div>
+
+        <!-- Dependents Information -->
+        ${formData.dependents.length > 0 ? `
+            <div class="mt-6 bg-blue-50 p-4 rounded-lg">
+                <h5 class="font-bold text-blue-900 mb-3">Dependents Claimed</h5>
+                <div class="space-y-2">
+                    ${formData.dependents.map((dep, index) => `
+                        <div class="bg-white p-2 rounded text-sm">
+                            <span class="font-medium">${dep.name}</span> - 
+                            ${dep.relationship} - 
+                            SSN: ${dep.ssn || 'Not provided'}
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        ` : ''}
     `;
 }
 
-function calculateTaxLiability(formData) {
-    const taxableIncome = Math.max(0, formData.income.wages - formData.deductions.standardDeduction);
-    // Simplified tax calculation for demo purposes
-    if (taxableIncome <= 10275) return taxableIncome * 0.10;
-    if (taxableIncome <= 41775) return 1027.50 + (taxableIncome - 10275) * 0.12;
-    if (taxableIncome <= 89450) return 4807.50 + (taxableIncome - 41775) * 0.22;
-    // Add more brackets as needed
-    return taxableIncome * 0.22; // Simplified
+function formatFilingStatus(status) {
+    const statusMap = {
+        'single': 'Single',
+        'married-joint': 'Married Filing Jointly',
+        'married-separate': 'Married Filing Separately',
+        'head-of-household': 'Head of Household',
+        'qualifying-widow': 'Qualifying Widow(er)'
+    };
+    return statusMap[status] || status;
+}
+
+function formatAddress(address) {
+    if (!address || !address.street) return 'Not provided';
+    return `${address.street}, ${address.city}, ${address.state} ${address.zipCode}`;
 }
 
 function enableFormEditing() {
-    // This would enable editing of form fields
-    showAlert('Form editing enabled. You can modify the values above.', 'info');
+    showAlert('Form editing enabled. You can modify the calculated values if needed.', 'info');
+    // Here you could add functionality to make form fields editable
 }
 
-// Payment Functions
+// Payment Functions (Step 4)
 function initializePaymentForm() {
     const elements = stripe.elements();
     cardElement = elements.create('card');
@@ -470,7 +716,7 @@ async function handlePayment() {
     }
 }
 
-// Final Submission
+// Final Submission (Step 5)
 async function handleFinalSubmission() {
     showLoading(true);
 
@@ -488,7 +734,7 @@ async function handleFinalSubmission() {
         if (response.ok) {
             document.getElementById('submissionStep').classList.add('hidden');
             document.getElementById('successMessage').classList.remove('hidden');
-            document.getElementById('submissionId').textContent = generateSubmissionId();
+            document.getElementById('submissionId').textContent = data.submissionId || generateSubmissionId();
             showAlert('Tax return submitted successfully!', 'success');
         } else {
             showAlert(data.message || 'Submission failed', 'error');
@@ -528,14 +774,36 @@ async function loadUserData() {
 
 function populateTaxInfoForm(taxInfo) {
     if (taxInfo.filingStatus) {
-        document.getElementById('filingStatus').value = taxInfo.filingStatus;
+        const filingStatusEl = document.getElementById('filingStatus');
+        if (filingStatusEl) filingStatusEl.value = taxInfo.filingStatus;
     }
     
     if (taxInfo.address) {
-        document.getElementById('addressStreet').value = taxInfo.address.street || '';
-        document.getElementById('addressCity').value = taxInfo.address.city || '';
-        document.getElementById('addressState').value = taxInfo.address.state || '';
-        document.getElementById('addressZip').value = taxInfo.address.zipCode || '';
+        const addressStreetEl = document.getElementById('addressStreet');
+        const addressCityEl = document.getElementById('addressCity');
+        const addressStateEl = document.getElementById('addressState');
+        const addressZipEl = document.getElementById('addressZip');
+        
+        if (addressStreetEl) addressStreetEl.value = taxInfo.address.street || '';
+        if (addressCityEl) addressCityEl.value = taxInfo.address.city || '';
+        if (addressStateEl) addressStateEl.value = taxInfo.address.state || '';
+        if (addressZipEl) addressZipEl.value = taxInfo.address.zipCode || '';
+    }
+
+    // Populate W-9 specific fields
+    if (taxInfo.taxClassification) {
+        const taxClassificationEl = document.getElementById('taxClassification');
+        if (taxClassificationEl) taxClassificationEl.value = taxInfo.taxClassification;
+    }
+    
+    if (taxInfo.ssn) {
+        const taxpayerSSNEl = document.getElementById('taxpayerSSN');
+        if (taxpayerSSNEl) taxpayerSSNEl.value = taxInfo.ssn;
+    }
+    
+    if (taxInfo.ein) {
+        const taxpayerEINEl = document.getElementById('taxpayerEIN');
+        if (taxpayerEINEl) taxpayerEINEl.value = taxInfo.ein;
     }
     
     if (taxInfo.dependents && taxInfo.dependents.length > 0) {
@@ -545,10 +813,15 @@ function populateTaxInfoForm(taxInfo) {
         taxInfo.dependents.forEach((dependent, index) => {
             if (dependentDivs[index]) {
                 const div = dependentDivs[index];
-                div.querySelector('.dependent-name').value = dependent.name || '';
-                div.querySelector('.dependent-ssn').value = dependent.ssn || '';
-                div.querySelector('.dependent-relationship').value = dependent.relationship || '';
-                div.querySelector('.dependent-dob').value = dependent.dateOfBirth || '';
+                const nameEl = div.querySelector('.dependent-name');
+                const ssnEl = div.querySelector('.dependent-ssn');
+                const relationshipEl = div.querySelector('.dependent-relationship');
+                const dobEl = div.querySelector('.dependent-dob');
+                
+                if (nameEl) nameEl.value = dependent.name || '';
+                if (ssnEl) ssnEl.value = dependent.ssn || '';
+                if (relationshipEl) relationshipEl.value = dependent.relationship || '';
+                if (dobEl) dobEl.value = dependent.dateOfBirth || '';
             }
         });
     }
@@ -584,19 +857,31 @@ function determineCurrentStep(userData) {
 }
 
 function showLoading(show) {
-    document.getElementById('loadingSpinner').classList.toggle('hidden', !show);
+    const spinner = document.getElementById('loadingSpinner');
+    if (spinner) {
+        spinner.classList.toggle('hidden', !show);
+    }
 }
 
 function showAlert(message, type = 'info') {
     // Create alert element
     const alertDiv = document.createElement('div');
-    alertDiv.className = `fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 ${
+    alertDiv.className = `fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 max-w-md ${
         type === 'success' ? 'bg-green-500 text-white' :
         type === 'error' ? 'bg-red-500 text-white' :
         type === 'warning' ? 'bg-yellow-500 text-black' :
         'bg-blue-500 text-white'
     }`;
-    alertDiv.textContent = message;
+    alertDiv.innerHTML = `
+        <div class="flex items-center justify-between">
+            <span class="text-sm font-medium">${message}</span>
+            <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-white hover:text-gray-200">
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+    `;
     
     document.body.appendChild(alertDiv);
     
@@ -610,23 +895,63 @@ function showAlert(message, type = 'info') {
 
 function generateSubmissionId() {
     return 'TX' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substr(2, 5).toUpperCase();
-}">
-                <h4 class="font-medium text-gray-900">Taxpayer Information</h4>
-                <div class="space-y-2 text-sm">
-                    <p><span class="font-medium">Name:</span> ${formData.taxpayer.name}</p>
-                    <p><span class="font-medium">SSN:</span> ${formData.taxpayer.ssn}</p>
-                    <p><span class="font-medium">Filing Status:</span> ${formData.filingStatus}</p>
-                </div>
-            </div>
+}
+
+// Enhanced OCR Processing for W-2 forms
+function enhanceOCRExtraction(text) {
+    const enhancedPatterns = {
+        employerName: /(?:employer|company)[:\s]*([^\n\r]{2,50})/i,
+        employerEIN: /(?:employer.*ein|ein)[:\s]*(\d{2}-\d{7})/i,
+        employeeSSN: /(?:employee.*ssn|social.*security)[:\s]*(\d{3}-\d{2}-\d{4})/i,
+        wages: /(?:wages.*tips.*compensation|box\s*1)[:\s]*\$?([\d,]+\.?\d*)/i,
+        federalTaxWithheld: /(?:federal.*income.*tax.*withheld|box\s*2)[:\s]*\$?([\d,]+\.?\d*)/i,
+        socialSecurityWages: /(?:social.*security.*wages|box\s*3)[:\s]*\$?([\d,]+\.?\d*)/i,
+        socialSecurityTax: /(?:social.*security.*tax.*withheld|box\s*4)[:\s]*\$?([\d,]+\.?\d*)/i,
+        medicareWages: /(?:medicare.*wages.*tips|box\s*5)[:\s]*\$?([\d,]+\.?\d*)/i,
+        medicareTax: /(?:medicare.*tax.*withheld|box\s*6)[:\s]*\$?([\d,]+\.?\d*)/i,
+        stateWages: /(?:state.*wages|box\s*16)[:\s]*\$?([\d,]+\.?\d*)/i,
+        stateTax: /(?:state.*tax|box\s*17)[:\s]*\$?([\d,]+\.?\d*)/i
+    };
+
+    const extractedData = {};
+    
+    for (const [field, pattern] of Object.entries(enhancedPatterns)) {
+        const match = text.match(pattern);
+        if (match) {
+            let value = match[1] || match[0];
             
-            <div class="space-y-4">
-                <h4 class="font-medium text-gray-900">Income Information</h4>
-                <div class="space-y-2 text-sm">
-                    <p><span class="font-medium">Total Wages:</span> $${formData.income.wages.toLocaleString()}</p>
-                    <p><span class="font-medium">Federal Tax Withheld:</span> $${formData.income.federalTaxWithheld.toLocaleString()}</p>
-                    <p><span class="font-medium">Social Security Wages:</span> $${formData.income.socialSecurityWages.toLocaleString()}</p>
-                    <p><span class="font-medium">Medicare Wages:</span> $${formData.income.medicareWages.toLocaleString()}</p>
-                </div>
-            </div>
-            
-            <div class="space-y-4
+            // Clean up monetary values
+            if (field.includes('wages') || field.includes('tax') || field.includes('Tax')) {
+                value = value.replace(/[,$]/g, '');
+                if (!isNaN(value)) {
+                    extractedData[field] = parseFloat(value);
+                }
+            } else {
+                extractedData[field] = value.trim();
+            }
+        }
+    }
+
+    return extractedData;
+}
+
+// Export functions for global access (for inline event handlers)
+window.formatSSNInput = formatSSNInput;
+window.formatEINInput = formatEINInput;
+
+// Enhanced error handling
+window.addEventListener('error', function(event) {
+    console.error('Global error:', event.error);
+    showAlert('An unexpected error occurred. Please try again.', 'error');
+});
+
+// Enhanced fetch error handling
+const originalFetch = window.fetch;
+window.fetch = function(...args) {
+    return originalFetch.apply(this, args)
+        .catch(error => {
+            console.error('Fetch error:', error);
+            showAlert('Network error. Please check your connection.', 'error');
+            throw error;
+        });
+};
