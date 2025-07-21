@@ -5,7 +5,7 @@ builder = "nixpacks"
 startCommand = "npm run migrate && npm start"
 restartPolicyType = "always"
 healthcheckPath = "/health"
-healthcheckTimeout = 30
+healthcheckTimeout = 60
 
 [environments.production]
 variables = {}
