@@ -3,7 +3,7 @@ const multer = require('multer');
 const Tesseract = require('tesseract.js');
 const fs = require('fs');
 const path = require('path');
-const { User } = require('../models/User'); // Import User from models
+const User = require('../models/User'); // Direct import, no destructuring
 const auth = require('../middleware/auth');
 
 const router = express.Router();
@@ -55,34 +55,6 @@ const extractW2Data = async (imagePath) => {
     
     console.log('Returning mock data:', mockData);
     return mockData;
-    
-    // Uncomment this for real OCR processing:
-    /*
-    const { data: { text } } = await Tesseract.recognize(imagePath, 'eng');
-    
-    const patterns = {
-      employerEIN: /\b\d{2}-\d{7}\b/,
-      employeeSSN: /\b\d{3}-\d{2}-\d{4}\b/,
-      wages: /(?:wages|box\s*1)[:\s]*\$?([\d,]+\.?\d*)/i,
-      federalTaxWithheld: /(?:federal|box\s*2)[:\s]*\$?([\d,]+\.?\d*)/i,
-      socialSecurityWages: /(?:social security|box\s*3)[:\s]*\$?([\d,]+\.?\d*)/i,
-      medicareWages: /(?:medicare|box\s*5)[:\s]*\$?([\d,]+\.?\d*)/i
-    };
-
-    const extractedData = {};
-    
-    for (const [field, pattern] of Object.entries(patterns)) {
-      const match = text.match(pattern);
-      if (match) {
-        extractedData[field] = match[1] || match[0];
-        if (field !== 'employerEIN' && field !== 'employeeSSN') {
-          extractedData[field] = extractedData[field].replace(/[,$]/g, '');
-        }
-      }
-    }
-
-    return extractedData;
-    */
   } catch (error) {
     console.error('OCR extraction error:', error);
     return {
@@ -97,23 +69,8 @@ const extractW2Data = async (imagePath) => {
 // Upload W-2 document
 router.post('/w2', auth, upload.single('w2Document'), async (req, res) => {
   console.log('🔥 W-2 UPLOAD REQUEST RECEIVED!');
-  console.log('Request method:', req.method);
-  console.log('Request URL:', req.url);
   console.log('User ID from auth:', req.userId);
   console.log('File in request:', !!req.file);
-  
-  if (req.file) {
-    console.log('File details:', {
-      fieldname: req.file.fieldname,
-      originalname: req.file.originalname,
-      encoding: req.file.encoding,
-      mimetype: req.file.mimetype,
-      size: req.file.size,
-      destination: req.file.destination,
-      filename: req.file.filename,
-      path: req.file.path
-    });
-  }
 
   try {
     if (!req.file) {
@@ -129,7 +86,6 @@ router.post('/w2', auth, upload.single('w2Document'), async (req, res) => {
     }
 
     console.log('✅ User found:', user.email);
-    console.log('Current documents before upload:', JSON.stringify(user.documents, null, 2));
 
     // Extract data from the uploaded document
     console.log('📄 Starting data extraction...');
@@ -149,24 +105,14 @@ router.post('/w2', auth, upload.single('w2Document'), async (req, res) => {
       extractedData: extractedData
     };
 
-    console.log('📝 Document info to save:', JSON.stringify(documentInfo, null, 2));
-
     // Add to user's documents array
     const currentDocuments = Array.isArray(user.documents) ? [...user.documents] : [];
-    console.log('📋 Current documents array:', currentDocuments);
-    
     currentDocuments.push(documentInfo);
-    console.log('📋 Documents after adding new one:', JSON.stringify(currentDocuments, null, 2));
 
     // Update the user
     console.log('💾 Saving to database...');
     await user.update({ documents: currentDocuments });
     console.log('✅ Database update completed');
-
-    // Verify the save worked
-    const verifyUser = await User.findByPk(req.userId);
-    console.log('🔍 Verification - documents after save:', JSON.stringify(verifyUser.documents, null, 2));
-    console.log('📊 Document count after save:', verifyUser.documents.length);
 
     // Clean up uploaded file
     try {
@@ -187,7 +133,6 @@ router.post('/w2', auth, upload.single('w2Document'), async (req, res) => {
     });
   } catch (error) {
     console.error('💥 Upload error:', error);
-    console.error('Error stack:', error.stack);
     
     // Clean up file if error occurs
     if (req.file && fs.existsSync(req.file.path)) {
@@ -234,7 +179,6 @@ router.delete('/documents/:documentId', auth, async (req, res) => {
     }
 
     console.log('✅ User found:', user.email);
-    console.log('Current documents:', JSON.stringify(user.documents, null, 2));
 
     const documents = Array.isArray(user.documents) ? user.documents : [];
     const documentToDelete = documents.find(doc => doc.id === req.params.documentId);
@@ -248,15 +192,10 @@ router.delete('/documents/:documentId', auth, async (req, res) => {
 
     // Remove document from array
     const updatedDocuments = documents.filter(doc => doc.id !== req.params.documentId);
-    console.log('📋 Documents after removal:', JSON.stringify(updatedDocuments, null, 2));
 
     // Update user in database
     await user.update({ documents: updatedDocuments });
     console.log('✅ Database updated successfully');
-
-    // Verify deletion
-    const verifyUser = await User.findByPk(req.userId);
-    console.log('🔍 Verification - documents after deletion:', verifyUser.documents.length);
 
     console.log('🎉 DOCUMENT DELETED SUCCESSFULLY!');
 
@@ -267,7 +206,6 @@ router.delete('/documents/:documentId', auth, async (req, res) => {
     });
   } catch (error) {
     console.error('💥 Delete document error:', error);
-    console.error('Error stack:', error.stack);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
