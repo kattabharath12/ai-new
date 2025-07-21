@@ -1,6 +1,6 @@
 const express = require('express');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const { User } = require('../models/User'); // Import User from models
+const User = require('../models/User'); // Direct import, no destructuring
 const auth = require('../middleware/auth');
 
 const router = express.Router();
