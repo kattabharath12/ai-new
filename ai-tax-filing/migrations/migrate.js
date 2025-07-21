@@ -1,3 +1,4 @@
+// migrations/migrate.js - Fixed version
 const fs = require('fs');
 const path = require('path');
 const pool = require('../config/database');
@@ -5,26 +6,26 @@ const pool = require('../config/database');
 async function runMigrations() {
   console.log('🚀 Starting database migrations...');
   
+  let client;
   try {
-    const client = await pool.connect();
+    // Get a client from the pool
+    client = await pool.connect();
     console.log('✅ Database connection successful');
-    client.release();
 
+    // Read the schema file
     const schemaPath = path.join(__dirname, 'schema.sql');
-    const schemaSQL = fs.readFileSync(schemaPath, 'utf8');
-    
-    const statements = schemaSQL.split(';').filter(stmt => stmt.trim());
-    
-    for (const statement of statements) {
-      if (statement.trim()) {
-        try {
-          await pool.query(statement);
-        } catch (error) {
-          console.warn(`⚠️  Statement warning: ${error.message}`);
-        }
-      }
+    if (!fs.existsSync(schemaPath)) {
+      throw new Error('Schema file not found at: ' + schemaPath);
     }
+
+    const schemaSQL = fs.readFileSync(schemaPath, 'utf8');
+    console.log('📄 Schema file loaded successfully');
     
+    // Execute the entire schema at once
+    await client.query(schemaSQL);
+    console.log('🏗️  Tables created successfully');
+    
+    // Verify tables were created
     const tablesQuery = `
       SELECT table_name 
       FROM information_schema.tables 
@@ -32,16 +33,27 @@ async function runMigrations() {
       ORDER BY table_name;
     `;
     
-    const result = await pool.query(tablesQuery);
+    const result = await client.query(tablesQuery);
     const tableNames = result.rows.map(row => row.table_name);
     
     console.log('📊 Created tables:', tableNames);
+    
+    if (tableNames.length === 0) {
+      throw new Error('No tables were created!');
+    }
+
     console.log('✅ Database migrations completed successfully!');
     
-    process.exit(0);
   } catch (error) {
-    console.error('❌ Migration failed:', error);
+    console.error('❌ Migration failed:', error.message);
+    console.error('Full error:', error);
     process.exit(1);
+  } finally {
+    if (client) {
+      client.release();
+    }
+    await pool.end();
+    process.exit(0);
   }
 }
 
