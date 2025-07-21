@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Tax Filing</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://js.stripe.com/v3/"></script>
+    <style>
+        .step-active { @apply bg-blue-600 text-white; }
+        .step-completed { @apply bg-green-600 text-white; }
+        .step-inactive { @apply bg-gray-300 text-gray-600; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-sm border-b">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <h1 class="text-xl font-bold text-gray-900">AI Tax Filing</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span id="userEmail" class="text-gray-700 hidden"></span>
+                    <button id="logoutBtn" class="text-red-600 hover:text-red-800 hidden">Logout</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Auth Section -->
+        <div id="authSection" class="space-y-8">
+            <!-- Login Form -->
+            <div id="loginForm" class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-2xl font-bold text-gray-900 mb-6">Login to Your Account</h2>
+                <form id="loginFormElement">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Email</label>
+                            <input type="email" id="loginEmail" required 
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 border">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Password</label>
+                            <input type="password" id="loginPassword" required 
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 border">
+                        </div>
+                        <button type="submit" 
+                                class="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            Login
+                        </button>
+                    </div>
+                </form>
+                <p class="mt-4 text-center text-sm text-gray-600">
+                    Don't have an account? 
+                    <button id="showSignup" class="text-blue-600 hover:text-blue-800">Sign up here</button>
+                </p>
+            </div>
+
+            <!-- Signup Form -->
+            <div id="signupForm" class="bg-white rounded-lg shadow p-6 hidden">
+                <h2 class="text-2xl font-bold text-gray-900 mb-6">Create Your Account</h2>
+                <form id="signupFormElement">
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">First Name</label>
+                                <input type="text" id="signupFirstName" required 
+                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 border">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Last Name</label>
+                                <input type="text" id="signupLastName" required 
+                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 border">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Email</label>
+                            <input type="email" id="signupEmail" required 
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 border">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Phone (Optional)</label>
+                            <input type="tel" id="signupPhone" 
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 border">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Password</label>
+                            <input type="password" id="signupPassword" required minlength="6"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 border">
+                        </div>
+                        <button type="submit" 
+                                class="w-full bg-green-600 text-white py-3 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500">
+                            Create Account
+                        </button>
+                    </div>
+                </form>
+                <p class="mt-4 text-center text-sm text-gray-600">
+                    Already have an account? 
+                    <button id="showLogin" class="text-blue-600 hover:text-blue-800">Login here</button>
+                </p>
+            </div>
+        </div>
+
+        <!-- Dashboard Section -->
+        <div id="dashboardSection" class="hidden">
+            <!-- Progress Steps -->
+            <div class="mb-8">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <div id="step1" class="step-active w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium">1</div>
+                        <div class="w-16 h-1 bg-gray-300 mx-2"></div>
+                        <div id="step2" class="step-inactive w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium">2</div>
+                        <div class="w-16 h-1 bg-gray-300 mx-2"></div>
+                        <div id="step3" class="step-inactive w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium">3</div>
+                        <div class="w-16 h-1 bg-gray-300 mx-2"></div>
+                        <div id="step4" class="step-inactive w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium">4</div>
+                        <div class="w-16 h-1 bg-gray-300 mx-2"></div>
+                        <div id="step5" class="step-inactive w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium">5</div>
+                    </div>
+                </div>
+                <div class="mt-2 flex justify-between text-xs text-gray-600">
+                    <span>Tax Info</span>
+                    <span>Upload W-2</span>
+                    <span>Review 1098</span>
+                    <span>Payment</span>
+                    <span>Submit</span>
+                </div>
+            </div>
+
+            <!-- Step 1: Tax Information -->
+            <div id="taxInfoStep" class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-xl font-bold text-gray-900 mb-6">Tax Information</h3>
+                <form id="taxInfoForm">
+                    <div class="space-y-6">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Filing Status</label>
+                            <select id="filingStatus" required 
+                                    class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 border">
+                                <option value="">Select Filing Status</option>
+                                <option value="single">Single</option>
+                                <option value="married-joint">Married Filing Jointly</option>
+                                <option value="married-separate">Married Filing Separately</option>
+                                <option value="head-of-household">Head of Household</option>
+                                <option value="qualifying-widow">Qualifying Widow(er)</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <h4 class="text-lg font-medium text-gray-900 mb-4">Address Information</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div class="md:col-span-2">
+                                    <label class="block text-sm font-medium text-gray-700">Street Address</label>
+                                    <input type="text" id="addressStreet" 
+                                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 border">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">City</label>
+                                    <input type="text" id="addressCity" 
+                                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 border">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">State</label>
+                                    <input type="text" id="addressState" 
+                                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 border">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">ZIP Code</label>
+                                    <input type="text" id="addressZip" 
+                                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 border">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h4 class="text-lg font-medium text-gray-900 mb-4">Dependents</h4>
+                            <div id="dependentsContainer">
+                                <!-- Dependents will be added dynamically -->
+                            </div>
+                            <button type="button" id="addDependent" 
+                                    class="mt-2 bg-gray-600 text-white py-2 px-4 rounded-md hover:bg-gray-700">
+                                Add Dependent
+                            </button>
+                        </div>
+
+                        <button type="submit" 
+                                class="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700">
+                            Save and Continue
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Step 2: Upload W-2 -->
+            <div id="uploadStep" class="bg-white rounded-lg shadow p-6 hidden">
+                <h3 class="text-xl font-bold text-gray-900 mb-6">Upload W-2 Documents</h3>
+                
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                    <input type="file" id="w2Upload" accept="image/*,.pdf" class="hidden">
+                    <div id="uploadArea" class="cursor-pointer">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                            <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                        <p class="mt-2 text-sm text-gray-600">
+                            Click to upload your W-2 documents or drag and drop
+                        </p>
+                        <p class="text-xs text-gray-500">PNG, JPG, PDF up to 10MB</p>
+                    </div>
+                </div>
+
+                <div id="uploadedDocs" class="mt-6 space-y-3">
+                    <!-- Uploaded documents will appear here -->
+                </div>
+
+                <button id="continueToReview" 
+                        class="mt-6 w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400"
+                        disabled>
+                    Generate 1098 Form
+                </button>
+            </div>
+
+            <!-- Step 3: Review 1098 Form -->
+            <div id="reviewStep" class="bg-white rounded-lg shadow p-6 hidden">
+                <h3 class="text-xl font-bold text-gray-900 mb-6">Review Your Tax Return (Form 1098)</h3>
+                
+                <div id="form1098Content" class="space-y-6">
+                    <!-- Form content will be populated dynamically -->
+                </div>
+
+                <div class="mt-8 flex space-x-4">
+                    <button id="editForm" 
+                            class="flex-1 bg-gray-600 text-white py-3 px-4 rounded-md hover:bg-gray-700">
+                        Edit Form
+                    </button>
+                    <button id="proceedToPayment" 
+                            class="flex-1 bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700">
+                        Proceed to Payment
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 4: Payment -->
+            <div id="paymentStep" class="bg-white rounded-lg shadow p-6 hidden">
+                <h3 class="text-xl font-bold text-gray-900 mb-6">Payment</h3>
+                
+                <div class="mb-6 p-4 bg-blue-50 rounded-lg">
+                    <h4 class="font-medium text-blue-900">Tax Filing Service</h4>
+                    <p class="text-blue-700">Professional tax return preparation and e-filing</p>
+                    <p class="text-2xl font-bold text-blue-900 mt-2">$49.99</p>
+                </div>
+
+                <div id="paymentForm">
+                    <div id="card-element" class="p-3 border border-gray-300 rounded-md">
+                        <!-- Stripe Elements will create form elements here -->
+                    </div>
+                    <div id="card-errors" role="alert" class="text-red-600 text-sm mt-2"></div>
+                    
+                    <button id="submitPayment" 
+                            class="mt-6 w-full bg-green-600 text-white py-3 px-4 rounded-md hover:bg-green-700">
+                        Pay $49.99
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 5: Final Submission -->
+            <div id="submissionStep" class="bg-white rounded-lg shadow p-6 hidden">
+                <h3 class="text-xl font-bold text-gray-900 mb-6">Final Submission</h3>
+                
+                <div class="text-center py-8">
+                    <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
+                        <svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                    </div>
+                    <h4 class="text-lg font-medium text-gray-900 mb-2">Ready to Submit</h4>
+                    <p class="text-gray-600 mb-6">Your tax return has been prepared and payment confirmed. Click below to submit to the IRS.</p>
+                    
+                    <button id="finalSubmit" 
+                            class="bg-blue-600 text-white py-3 px-8 rounded-md hover:bg-blue-700 text-lg font-medium">
+                        Submit Tax Return
+                    </button>
+                </div>
+            </div>
+
+            <!-- Success Message -->
+            <div id="successMessage" class="bg-white rounded-lg shadow p-6 hidden">
+                <div class="text-center py-8">
+                    <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-4">
+                        <svg class="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-2">Tax Return Submitted!</h3>
+                    <p class="text-gray-600 mb-6">Your tax return has been successfully submitted to the IRS. You will receive email updates on the processing status.</p>
+                    <p class="text-sm text-gray-500">Reference ID: <span id="submissionId" class="font-mono"></span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loadingSpinner" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+        <div class="bg-white p-6 rounded-lg">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            <p class="mt-2 text-gray-600">Processing...</p>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
