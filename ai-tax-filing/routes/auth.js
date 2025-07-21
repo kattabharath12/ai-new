@@ -1,7 +1,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
-const { User } = require('../models/User'); // Import User from models
+const User = require('../models/User'); // Direct import, no destructuring
 const auth = require('../middleware/auth');
 
 const router = express.Router();
@@ -102,6 +102,9 @@ router.post('/login', [
 // Get current user
 router.get('/me', auth, async (req, res) => {
   try {
+    console.log('User model:', typeof User); // Debug log
+    console.log('User.findByPk:', typeof User.findByPk); // Debug log
+    
     const user = await User.findByPk(req.userId, {
       attributes: { exclude: ['password'] }
     });
