@@ -1,6 +1,6 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const { User } = require('../models/User'); // Import User from models
+const User = require('../models/User'); // Direct import, no destructuring
 const auth = require('../middleware/auth');
 
 const router = express.Router();
@@ -73,19 +73,13 @@ router.post('/generate-1098', auth, async (req, res) => {
     }
 
     console.log('✅ User found for form generation:', user.email);
-    console.log('📋 Raw user.documents:', JSON.stringify(user.documents, null, 2));
-    console.log('📊 Documents array type:', typeof user.documents);
-    console.log('📊 Documents array length:', user.documents ? user.documents.length : 'NULL');
 
     // Find W-2 documents from user.documents array
     const documents = user.documents || [];
     console.log('📋 Documents after null check:', documents);
-    console.log('📊 Is documents an array?', Array.isArray(documents));
     
     const w2Documents = documents.filter(doc => {
       console.log('🔍 Checking document:', JSON.stringify(doc, null, 2));
-      console.log('🔍 Document type:', doc.type);
-      console.log('🔍 Type comparison result:', doc.type === 'w2');
       return doc.type === 'w2';
     });
     
@@ -94,7 +88,6 @@ router.post('/generate-1098', auth, async (req, res) => {
     
     if (w2Documents.length === 0) {
       console.log('❌ NO W-2 DOCUMENTS FOUND AFTER FILTERING!');
-      console.log('📋 All documents for debugging:', JSON.stringify(documents, null, 2));
       return res.status(400).json({ message: 'No W-2 documents found. Please upload W-2 first.' });
     }
 
@@ -171,7 +164,6 @@ router.post('/generate-1098', auth, async (req, res) => {
     });
   } catch (error) {
     console.error('💥 Generate 1098 error:', error);
-    console.error('Error stack:', error.stack);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
